@@ -10,17 +10,17 @@ const config: Config = {
     extend: {
       colors: {
         brand: {
-          50:  '#e8f5ff',   // page bg  — clearly light blue, not near-white
-          100: '#cce9fb',   // borders  — visibly blue on white cards
-          200: '#99d3f7',   // accents
-          300: '#57b8f0',
-          400: '#239de6',
-          500: '#0783cc',   // focus rings
-          600: '#0270b5',   // primary buttons / links — confident corporate blue
-          700: '#005d97',   // hover states
-          800: '#004c7c',
-          900: '#003c62',
-          950: '#002744',
+          50:  '#f0f7ff',   // page bg  — clean, barely-perceptible blue-white
+          100: '#d6e8fc',   // borders
+          200: '#aacdf5',   // accents
+          300: '#68aff0',
+          400: '#2d8fdf',
+          500: '#0a73cc',   // focus rings
+          600: '#0a5ca0',   // primary buttons — slightly deeper corporate blue
+          700: '#084d87',   // hover states
+          800: '#063d6e',
+          900: '#042d52',
+          950: '#021d38',
         },
       },
       fontFamily: {

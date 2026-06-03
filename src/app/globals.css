@@ -6,14 +6,37 @@
 @layer base {
   html {
     -webkit-tap-highlight-color: transparent;
+    /* Prevent any element wider than the viewport from causing
+       horizontal page scroll. overflow-x: clip (unlike hidden)
+       does NOT create a scroll container, so position:fixed
+       elements (modals, toasts) are unaffected. */
+    overflow-x: clip;
   }
   body {
     @apply bg-brand-50 text-gray-900 antialiased;
+    /* Smooth momentum scrolling on iOS for the page itself */
+    -webkit-overflow-scrolling: touch;
   }
 }
 
 @layer utilities {
   .safe-bottom {
     padding-bottom: env(safe-area-inset-bottom);
+  }
+
+  /* Hide scrollbars on all browsers including iOS Safari/Chrome.
+     Apply to any horizontally scrollable container (e.g. chip rows). */
+  .scrollbar-hide {
+    scrollbar-width: none;       /* Firefox */
+    -ms-overflow-style: none;    /* IE / Edge legacy */
+  }
+  .scrollbar-hide::-webkit-scrollbar {
+    display: none;               /* Chrome / Safari / iOS */
+  }
+
+  /* Smooth momentum scrolling for horizontally scrollable containers */
+  .scroll-smooth-x {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
   }
 }

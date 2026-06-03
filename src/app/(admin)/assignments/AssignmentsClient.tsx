@@ -217,7 +217,7 @@ export default function AssignmentsClient({
             </div>
 
             {/* Work type filter chips — horizontally scrollable on mobile */}
-            <div className="flex gap-2 overflow-x-auto pb-1" style={{ scrollbarWidth: 'none' }}>
+            <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-hide scroll-smooth-x">
               <button
                 onClick={() => setWtFilter('all')}
                 className={cn(
