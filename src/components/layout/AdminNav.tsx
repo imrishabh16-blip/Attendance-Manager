@@ -55,7 +55,7 @@ export default function AdminNav({ profile }: Props) {
               key={item.href}
               href={item.href}
               className={cn(
-                'flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-colors',
+                'flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium',
                 pathname === item.href || pathname.startsWith(item.href + '/')
                   ? 'bg-brand-50 text-brand-700'
                   : 'text-gray-600 hover:bg-gray-50'
@@ -86,7 +86,7 @@ export default function AdminNav({ profile }: Props) {
               key={item.href}
               href={item.href}
               className={cn(
-                'flex-1 flex flex-col items-center gap-0.5 py-2.5 text-xs font-medium transition-colors',
+                'flex-1 flex flex-col items-center gap-0.5 py-2.5 text-xs font-medium active:opacity-60',
                 pathname === item.href || pathname.startsWith(item.href + '/')
                   ? 'text-brand-600'
                   : 'text-gray-400'

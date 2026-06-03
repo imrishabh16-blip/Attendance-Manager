@@ -19,7 +19,13 @@ export default async function AdminLayout({ children }: { children: React.ReactN
   return (
     <div className="flex min-h-screen">
       <AdminNav profile={profile} />
-      <main className="flex-1 overflow-auto">{children}</main>
+      {/* min-w-0 prevents flex children from expanding past their allocation.
+          overflow-x-hidden clips anything wider than the viewport.
+          overflow-y-auto allows normal vertical page scroll.
+          pb-20 sm:pb-0 clears the fixed mobile bottom nav (≈56px + safe area). */}
+      <main className="flex-1 min-w-0 overflow-y-auto overflow-x-hidden pb-20 sm:pb-0">
+        {children}
+      </main>
     </div>
   )
 }
