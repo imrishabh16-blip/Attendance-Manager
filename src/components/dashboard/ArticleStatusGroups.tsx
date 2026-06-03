@@ -31,7 +31,7 @@ function GroupHeader({
   return (
     <button
       onClick={onClick}
-      className="flex items-center gap-2 mb-3 w-full group text-left"
+      className="flex items-center gap-2 mb-3 w-full group text-left py-1"
     >
       <span className="text-xs font-semibold text-gray-500 uppercase tracking-wider">
         {label}

@@ -24,7 +24,7 @@ export default function DashboardClient({ profile: _ }: Props) {
           <div>
             <h1 className="text-lg font-bold text-gray-900">Dashboard</h1>
             <p className="text-xs text-gray-400">
-              {new Date().toLocaleDateString('en-IN', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}
+              {new Date().toLocaleDateString('en-IN', { timeZone: 'Asia/Kolkata', weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}
             </p>
           </div>
           <div className="flex items-center gap-3">
@@ -32,7 +32,7 @@ export default function DashboardClient({ profile: _ }: Props) {
               Realtime
               <span className="inline-block w-1.5 h-1.5 bg-green-500 rounded-full ml-1.5 animate-pulse" />
             </span>
-            <button onClick={refresh} className="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg">
+            <button onClick={refresh} className="p-3 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg">
               <RefreshCw className="h-4 w-4" />
             </button>
           </div>

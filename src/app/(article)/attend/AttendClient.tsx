@@ -198,7 +198,7 @@ export default function AttendClient({ profile }: Props) {
         <div className="max-w-md mx-auto flex items-center justify-between">
           <div>
             <p className="text-xs text-gray-400">
-              {new Date().toLocaleDateString('en-IN', { weekday: 'long', day: 'numeric', month: 'long' })}
+              {new Date().toLocaleDateString('en-IN', { timeZone: 'Asia/Kolkata', weekday: 'long', day: 'numeric', month: 'long' })}
             </p>
             <h1 className="text-base font-semibold text-gray-900">{profile.full_name}</h1>
           </div>

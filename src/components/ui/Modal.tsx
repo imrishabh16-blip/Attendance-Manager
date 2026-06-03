@@ -42,7 +42,7 @@ export function Modal({ open, onClose, title, children, className }: ModalProps)
         {title && (
           <div className="flex items-center justify-between px-5 py-4 border-b border-brand-200">
             <h2 className="text-base font-semibold text-gray-900">{title}</h2>
-            <button onClick={onClose} className="p-1 rounded-lg text-gray-400 hover:text-gray-600 hover:bg-gray-100">
+            <button onClick={onClose} aria-label="Close" className="p-1.5 rounded-lg text-gray-400 hover:text-gray-600 hover:bg-gray-100">
               <X className="h-5 w-5" />
             </button>
           </div>

@@ -6,8 +6,6 @@ import type { AttendanceRecord, LeaveRecord } from '@/types/app'
 
 export function useAttendanceSession(userId: string) {
   const supabase = getSupabaseBrowserClient()
-  // Use IST date — UTC split returns the wrong date between midnight IST and 5:30 AM IST
-  const today = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' })
 
   const [todayRecords, setTodayRecords] = useState<AttendanceRecord[]>([])
   const [openRecord, setOpenRecord] = useState<AttendanceRecord | null>(null)
@@ -15,6 +13,9 @@ export function useAttendanceSession(userId: string) {
   const [loading, setLoading] = useState(true)
 
   const load = useCallback(async () => {
+    // Compute fresh IST date on every load call — computing it at hook
+    // init means a page open across midnight would query the wrong date.
+    const today = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' })
     const [{ data: records }, { data: leave }] = await Promise.all([
       supabase
         .from('attendance_records')
@@ -35,7 +36,7 @@ export function useAttendanceSession(userId: string) {
     setOpenRecord(recs.find(r => r.checked_in_at && !r.checked_out_at) ?? null)
     setTodayLeave(leave)
     setLoading(false)
-  }, [supabase, userId, today])
+  }, [supabase, userId])
 
   useEffect(() => {
     load()

@@ -204,7 +204,7 @@ export default function AssignmentsClient({
                 {(['active', 'archived', 'all'] as const).map(s => (
                   <button key={s} onClick={() => setStatus(s)}
                     className={cn(
-                      'px-4 py-2.5 rounded-xl text-sm font-medium transition-colors',
+                      'px-4 py-2.5 rounded-xl text-sm font-medium transition-colors focus:outline-none focus:ring-2 focus:ring-brand-500 focus:ring-offset-1',
                       statusFilter === s
                         ? 'bg-brand-600 text-white'
                         : 'bg-white border border-brand-200 text-brand-700 hover:bg-brand-50'
@@ -266,11 +266,11 @@ export default function AssignmentsClient({
                     </div>
                     <div className="flex items-center gap-2 flex-shrink-0">
                       <button onClick={() => router.push(`/assignments/${a.id}`)}
-                        className="text-xs text-brand-600 hover:text-brand-700 font-medium">
+                        className="text-xs text-brand-600 hover:text-brand-700 font-medium px-2 py-1.5 rounded-lg hover:bg-brand-50">
                         View
                       </button>
                       <button onClick={() => toggleArchive(a)}
-                        className="text-xs text-gray-400 hover:text-gray-600"
+                        className="text-xs text-gray-400 hover:text-gray-600 p-1.5 rounded-lg hover:bg-gray-50"
                         title={a.status === 'active' ? 'Archive' : 'Reactivate'}>
                         <Archive className="h-4 w-4" />
                       </button>

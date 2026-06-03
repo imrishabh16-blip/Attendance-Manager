@@ -84,7 +84,7 @@ export function ClientWorkSelector({ onSelect, onSelectOthers, onSelectUnallocat
       ) : (
         <>
           {filtered.length > 0 && (
-            <ul className="divide-y divide-brand-100 rounded-xl border border-brand-200 overflow-hidden max-h-52 overflow-y-auto">
+            <ul className="divide-y divide-brand-100 rounded-xl border border-brand-200 overflow-hidden max-h-36 overflow-y-auto">
               {filtered.map(c => (
                 <li key={c.id}>
                   <button

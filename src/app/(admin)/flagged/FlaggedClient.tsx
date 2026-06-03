@@ -155,7 +155,7 @@ export default function FlaggedClient({ records: initial }: Props) {
             <button
               key={t}
               onClick={() => setTab(t)}
-              className={`px-4 py-2 text-sm font-medium rounded-t-lg transition-colors ${
+              className={`px-4 py-2 text-sm font-medium rounded-t-lg transition-colors focus:outline-none focus:ring-2 focus:ring-brand-500 focus:ring-offset-1 ${
                 tab === t
                   ? 'text-brand-600 border-b-2 border-brand-600'
                   : 'text-gray-500 hover:text-gray-700'
