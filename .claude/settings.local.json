@@ -1,0 +1,20 @@
+{
+  "permissions": {
+    "allow": [
+      "WebFetch(domain:registry.npmjs.org)",
+      "Bash(npm run *)",
+      "Bash(node -e ' *)",
+      "Bash(node -e \"console.log\\('Project ready. Type-check: clean. Build: 23 routes compiled.'\\)\")",
+      "Bash(npx tsc *)",
+      "Bash(npx next *)",
+      "Bash(mkdir -p \"C:\\\\Users\\\\imris\\\\Desktop\\\\AI Shenanigans\\\\Attendance Manager\\\\src\\\\app\\\\\\(admin\\)\\\\articles\\\\[id]\")",
+      "Bash(Get-ChildItem -Path \"C:\\\\Users\\\\imris\\\\Desktop\\\\AI Shenanigans\\\\Attendance Manager\" -Force)",
+      "Bash(Select-Object Name, PSIsContainer)",
+      "Bash(Get-ChildItem -Path \"C:\\\\Users\\\\imris\\\\Desktop\\\\AI Shenanigans\\\\Attendance Manager\\\\src\\\\app\\\\api\" -Recurse -File)",
+      "Bash(Select-Object FullName)",
+      "PowerShell(cd \"C:\\\\Users\\\\imris\\\\Desktop\\\\AI Shenanigans\\\\Attendance Manager\"; Get-ChildItem -Recurse -Directory 2>$null | Where-Object { $_.FullName -match \"\\(src|supabase\\)\" } | Select-Object -ExpandProperty FullName | head -30)",
+      "Bash(mkdir -p \"C:/Users/imris/Desktop/AI Shenanigans/Attendance Manager/src/app/api/flagged/[id]\")",
+      "Bash(xargs grep -l \"signInWithOAuth\\\\|redirectTo\\\\|SITE_URL\\\\|oauth\\\\|login\")"
+    ]
+  }
+}

@@ -1,0 +1,16 @@
+[build]
+  command = "npm run build"
+  publish = ".next"
+
+[[plugins]]
+  package = "@netlify/plugin-nextjs"
+
+[build.environment]
+  NEXT_TELEMETRY_DISABLED = "1"
+  NODE_VERSION = "20"
+
+# No manual redirects needed.
+# @netlify/plugin-nextjs handles all routing — SSR pages, API routes,
+# middleware, and static assets — automatically. Adding a catch-all
+# redirect here would intercept requests before the plugin can handle
+# them and break API routes, auth callbacks, and server-rendered pages.

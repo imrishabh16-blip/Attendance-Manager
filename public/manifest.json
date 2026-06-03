@@ -1,0 +1,16 @@
+{
+  "name": "CA Attendance Manager",
+  "short_name": "Attendance",
+  "description": "Article attendance and workload tracking",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#f9fafb",
+  "theme_color": "#0c8ee7",
+  "icons": [
+    {
+      "src": "/favicon.ico",
+      "sizes": "48x48",
+      "type": "image/x-icon"
+    }
+  ]
+}
