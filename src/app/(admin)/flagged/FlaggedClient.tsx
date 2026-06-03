@@ -130,9 +130,9 @@ export default function FlaggedClient({ records: initial }: Props) {
   }
 
   return (
-    <div className="min-h-screen bg-brand-50">
+    <div className="min-h-screen bg-brand-100">
       {/* Header */}
-      <div className="bg-white border-b border-brand-100 px-4 sm:px-6 py-4">
+      <div className="bg-white border-b border-brand-200 px-4 sm:px-6 py-4">
         <div className="max-w-4xl mx-auto flex items-center justify-between">
           <div>
             <h1 className="text-lg font-bold text-gray-900">Flagged Records</h1>
@@ -241,7 +241,7 @@ export default function FlaggedClient({ records: initial }: Props) {
 
                 {/* Actions (pending only) */}
                 {r.flagged_for_review && (
-                  <div className="flex items-center gap-2 pt-1">
+                  <div className="flex flex-wrap items-center gap-2 pt-1">
                     <Button
                       size="sm"
                       onClick={() => openResolveModal(r)}

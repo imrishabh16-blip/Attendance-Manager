@@ -66,8 +66,8 @@ export default function UsersClient({ users: initial, currentUserId, currentUser
   }
 
   return (
-    <div className="min-h-screen bg-brand-50">
-      <div className="bg-white border-b border-brand-100 px-4 sm:px-6 py-4">
+    <div className="min-h-screen bg-brand-100">
+      <div className="bg-white border-b border-brand-200 px-4 sm:px-6 py-4">
         <div className="max-w-4xl mx-auto">
           <h1 className="text-lg font-bold text-gray-900">User Management</h1>
         </div>

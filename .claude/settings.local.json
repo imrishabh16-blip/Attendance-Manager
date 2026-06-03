@@ -15,7 +15,10 @@
       "PowerShell(cd \"C:\\\\Users\\\\imris\\\\Desktop\\\\AI Shenanigans\\\\Attendance Manager\"; Get-ChildItem -Recurse -Directory 2>$null | Where-Object { $_.FullName -match \"\\(src|supabase\\)\" } | Select-Object -ExpandProperty FullName | head -30)",
       "Bash(mkdir -p \"C:/Users/imris/Desktop/AI Shenanigans/Attendance Manager/src/app/api/flagged/[id]\")",
       "Bash(xargs grep -l \"signInWithOAuth\\\\|redirectTo\\\\|SITE_URL\\\\|oauth\\\\|login\")",
-      "Bash(Get-ChildItem -Path \"C:\\\\Users\\\\imris\\\\Desktop\\\\AI Shenanigans\\\\Attendance Manager\\\\src\\\\app\" -Recurse -Filter \"*.tsx\")"
+      "Bash(Get-ChildItem -Path \"C:\\\\Users\\\\imris\\\\Desktop\\\\AI Shenanigans\\\\Attendance Manager\\\\src\\\\app\" -Recurse -Filter \"*.tsx\")",
+      "Bash(Get-ChildItem -Path \"C:\\\\Users\\\\imris\\\\Desktop\\\\AI Shenanigans\\\\Attendance Manager\" -Recurse -Directory)",
+      "Bash(Select-Object -ExpandProperty FullName)",
+      "Bash(Sort-Object)"
     ]
   }
 }

@@ -105,9 +105,9 @@ export default async function ArticleDetailPage({
   const totalHoursLabel = h > 0 ? (m > 0 ? `${h}h ${m}m` : `${h}h`) : `${m}m`
 
   return (
-    <div className="min-h-screen bg-brand-50">
+    <div className="min-h-screen bg-brand-100">
       {/* Header */}
-      <div className="bg-white border-b border-gray-100 px-4 sm:px-6 py-4">
+      <div className="bg-white border-b border-brand-200 px-4 sm:px-6 py-4">
         <div className="max-w-3xl mx-auto">
           <Link
             href="/articles"

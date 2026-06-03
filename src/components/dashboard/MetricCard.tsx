@@ -24,7 +24,7 @@ export function MetricCard({ label, value, icon: Icon, color = 'blue', alert, hr
   const c = colors[color]
   const card = (
     <div className={cn(
-      'bg-white rounded-2xl border border-gray-100 shadow-sm p-4 flex flex-col gap-3',
+      'bg-white rounded-2xl border border-brand-200 shadow-sm p-4 flex flex-col gap-3',
       alert && 'ring-2 ring-red-300',
       href  && 'cursor-pointer hover:shadow-md transition-shadow'
     )}>

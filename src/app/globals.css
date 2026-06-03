@@ -13,7 +13,7 @@
     overflow-x: clip;
   }
   body {
-    @apply bg-brand-50 text-gray-900 antialiased;
+    @apply bg-brand-100 text-gray-900 antialiased;
     /* Smooth momentum scrolling on iOS for the page itself */
     -webkit-overflow-scrolling: touch;
   }

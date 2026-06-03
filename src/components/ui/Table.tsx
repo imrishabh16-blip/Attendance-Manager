@@ -7,7 +7,7 @@ interface TableProps {
 
 export function Table({ children, className }: TableProps) {
   return (
-    <div className="w-full overflow-x-auto rounded-xl border border-gray-100">
+    <div className="w-full overflow-x-auto rounded-xl border border-brand-200">
       <table className={cn('w-full text-sm', className)}>
         {children}
       </table>
@@ -17,7 +17,7 @@ export function Table({ children, className }: TableProps) {
 
 export function Thead({ children }: TableProps) {
   return (
-    <thead className="bg-gray-50 text-xs font-semibold text-gray-500 uppercase tracking-wide">
+    <thead className="bg-brand-50 text-xs font-semibold text-gray-500 uppercase tracking-wide">
       {children}
     </thead>
   )

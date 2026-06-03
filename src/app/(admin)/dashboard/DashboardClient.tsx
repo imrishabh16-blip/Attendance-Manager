@@ -5,7 +5,6 @@ import { MetricCard } from '@/components/dashboard/MetricCard'
 import { LiveActivityTable } from '@/components/dashboard/LiveActivityTable'
 import { ArticleStatusGroups } from '@/components/dashboard/ArticleStatusGroups'
 import { Card, CardHeader, CardBody } from '@/components/ui/Card'
-import { Spinner } from '@/components/ui/Spinner'
 import { RefreshCw, UserCheck, UserX, Clock, Flag } from 'lucide-react'
 
 interface Props {
@@ -18,9 +17,9 @@ export default function DashboardClient({ profile: _ }: Props) {
   const s = summary
 
   return (
-    <div className="min-h-screen bg-brand-50">
+    <div className="min-h-screen bg-brand-100">
       {/* Header */}
-      <div className="bg-white border-b border-brand-100 px-4 sm:px-6 py-4">
+      <div className="bg-white border-b border-brand-200 px-4 sm:px-6 py-4">
         <div className="max-w-7xl mx-auto flex items-center justify-between">
           <div>
             <h1 className="text-lg font-bold text-gray-900">Dashboard</h1>
@@ -42,7 +41,21 @@ export default function DashboardClient({ profile: _ }: Props) {
 
       <div className="max-w-7xl mx-auto px-4 sm:px-6 py-6 space-y-6">
         {loading ? (
-          <div className="flex justify-center py-20"><Spinner className="h-8 w-8" /></div>
+          <>
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+              {[0, 1, 2, 3].map(i => (
+                <div key={i} className="bg-white rounded-2xl border border-brand-200 shadow-sm p-4 flex flex-col gap-3 animate-pulse">
+                  <div className="w-10 h-10 rounded-xl bg-brand-100" />
+                  <div className="space-y-1.5">
+                    <div className="h-7 w-10 bg-brand-100 rounded" />
+                    <div className="h-3 w-28 bg-gray-100 rounded" />
+                  </div>
+                </div>
+              ))}
+            </div>
+            <div className="bg-white rounded-2xl border border-brand-200 shadow-sm h-40 animate-pulse" />
+            <div className="bg-white rounded-2xl border border-brand-200 shadow-sm h-32 animate-pulse" />
+          </>
         ) : (
           <>
             {/* Metric strip — 4 cards */}

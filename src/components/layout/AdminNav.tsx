@@ -35,9 +35,29 @@ export default function AdminNav({ profile }: Props) {
 
   return (
     <>
+      {/* Mobile top header — sign-out is here since the bottom nav has no room */}
+      <div className="sm:hidden fixed top-0 inset-x-0 h-12 z-30 bg-white border-b border-brand-200 flex items-center justify-between px-4">
+        <div className="flex items-center gap-2">
+          <div className="w-6 h-6 rounded bg-brand-600 text-white text-xs font-bold flex items-center justify-center">
+            CA
+          </div>
+          <span className="text-sm font-semibold text-gray-900 truncate max-w-[180px]">
+            {profile.full_name}
+          </span>
+        </div>
+        <button
+          onClick={signOut}
+          className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium text-gray-500 hover:bg-gray-50 active:opacity-70 transition-colors"
+          aria-label="Sign out"
+        >
+          <LogOut className="h-4 w-4" />
+          <span className="text-xs">Sign Out</span>
+        </button>
+      </div>
+
       {/* Desktop sidebar */}
-      <aside className="hidden sm:flex flex-col w-56 bg-white border-r border-brand-100 min-h-screen">
-        <div className="px-4 py-5 border-b border-brand-100">
+      <aside className="hidden sm:flex flex-col w-56 bg-white border-r border-brand-200 min-h-screen">
+        <div className="px-4 py-5 border-b border-brand-200">
           <div className="flex items-center gap-2">
             <div className="w-8 h-8 rounded-lg bg-brand-600 text-white text-xs font-bold flex items-center justify-center">
               CA
@@ -79,7 +99,7 @@ export default function AdminNav({ profile }: Props) {
       </aside>
 
       {/* Mobile bottom nav */}
-      <nav className="sm:hidden fixed bottom-0 inset-x-0 bg-white border-t border-brand-100 z-40 safe-bottom">
+      <nav className="sm:hidden fixed bottom-0 inset-x-0 bg-white border-t border-brand-200 z-40 safe-bottom">
         <div className="flex">
           {visible.map(item => (
             <Link

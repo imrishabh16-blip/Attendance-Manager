@@ -23,7 +23,7 @@ export default async function AdminLayout({ children }: { children: React.ReactN
           overflow-x-hidden clips anything wider than the viewport.
           overflow-y-auto allows normal vertical page scroll.
           pb-20 sm:pb-0 clears the fixed mobile bottom nav (≈56px + safe area). */}
-      <main className="flex-1 min-w-0 overflow-y-auto overflow-x-hidden pb-20 sm:pb-0">
+      <main className="flex-1 min-w-0 overflow-y-auto overflow-x-hidden pb-20 sm:pb-0 pt-12 sm:pt-0">
         {children}
       </main>
     </div>

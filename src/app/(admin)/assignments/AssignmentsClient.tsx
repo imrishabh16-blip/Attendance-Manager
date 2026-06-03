@@ -145,9 +145,9 @@ export default function AssignmentsClient({
   }
 
   return (
-    <div className="min-h-screen bg-brand-50">
+    <div className="min-h-screen bg-brand-100">
       {/* Header */}
-      <div className="bg-white border-b border-brand-100 px-4 sm:px-6 py-4">
+      <div className="bg-white border-b border-brand-200 px-4 sm:px-6 py-4">
         <div className="max-w-5xl mx-auto flex items-center justify-between">
           <h1 className="text-lg font-bold text-gray-900">Assignments</h1>
           {tab === 'assignments' && (
@@ -285,7 +285,7 @@ export default function AssignmentsClient({
         {/* ── CLIENTS TAB ── */}
         {tab === 'clients' && (
           <>
-            <p className="text-xs text-brand-600 bg-brand-50 border border-brand-100 rounded-xl px-4 py-2.5">
+            <p className="text-xs text-brand-600 bg-white border border-brand-200 rounded-xl px-4 py-2.5">
               Articles see this list when checking in. Add all your office clients here.
             </p>
             <div className="relative">
@@ -319,7 +319,7 @@ export default function AssignmentsClient({
         {/* ── WORK TYPES TAB ── */}
         {tab === 'work_types' && (
           <>
-            <p className="text-xs text-brand-600 bg-brand-50 border border-brand-100 rounded-xl px-4 py-2.5">
+            <p className="text-xs text-brand-600 bg-white border border-brand-200 rounded-xl px-4 py-2.5">
               Articles select a work type when checking in. These appear in the work type dropdown.
             </p>
             <div className="relative">
