@@ -192,9 +192,9 @@ export default function AttendClient({ profile }: Props) {
   const isCheckoutFlow = step === 'note_input' && !!openRecord && !!gpsCoords
 
   return (
-    <div className="min-h-screen bg-brand-50">
+    <div className="min-h-screen bg-brand-100">
       {/* Header */}
-      <div className="bg-white border-b border-brand-100 px-4 py-4">
+      <div className="bg-white border-b border-brand-200 px-4 py-4">
         <div className="max-w-md mx-auto flex items-center justify-between">
           <div>
             <p className="text-xs text-gray-400">

@@ -137,7 +137,7 @@ export default async function AssignmentDetailPage({
                 No completed attendance sessions yet.
               </p>
             ) : (
-              <ul className="divide-y divide-gray-50">
+              <ul className="divide-y divide-brand-100">
                 {sessions.map((s: {
                   id: string
                   article_id: string

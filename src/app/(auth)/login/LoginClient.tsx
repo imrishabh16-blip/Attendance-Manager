@@ -25,7 +25,7 @@ export default function LoginClient() {
   }
 
   return (
-    <div className="min-h-screen flex flex-col items-center justify-center bg-brand-50 px-4">
+    <div className="min-h-screen flex flex-col items-center justify-center bg-brand-100 px-4">
       <div className="w-full max-w-sm">
         {/* Logo / Brand */}
         <div className="text-center mb-8">
@@ -37,7 +37,7 @@ export default function LoginClient() {
         </div>
 
         {/* Sign-in card */}
-        <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6">
+        <div className="bg-white rounded-2xl shadow-md border border-brand-200 p-6">
           <Button
             onClick={signIn}
             loading={loading}

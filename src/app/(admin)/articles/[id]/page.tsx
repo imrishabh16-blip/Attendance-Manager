@@ -173,7 +173,7 @@ export default async function ArticleDetailPage({
                 No attendance records yet.
               </p>
             ) : (
-              <ul className="divide-y divide-gray-50">
+              <ul className="divide-y divide-brand-100">
                 {sessions.map(s => {
                   const asgn = (
                     s as unknown as { assignments?: { client_name: string; work_type: string } }
@@ -275,7 +275,7 @@ export default async function ArticleDetailPage({
             {!leaves || leaves.length === 0 ? (
               <p className="text-sm text-gray-400 text-center py-8">No leave records.</p>
             ) : (
-              <ul className="divide-y divide-gray-50">
+              <ul className="divide-y divide-brand-100">
                 {leaves.map(l => (
                   <li key={l.id} className="px-5 py-3 flex items-center justify-between gap-3">
                     <span className="text-sm text-gray-700">{formatDate(l.leave_date)}</span>

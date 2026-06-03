@@ -84,7 +84,7 @@ export function ClientWorkSelector({ onSelect, onSelectOthers, onSelectUnallocat
       ) : (
         <>
           {filtered.length > 0 && (
-            <ul className="divide-y divide-brand-50 rounded-xl border border-brand-100 overflow-hidden max-h-52 overflow-y-auto">
+            <ul className="divide-y divide-brand-100 rounded-xl border border-brand-200 overflow-hidden max-h-52 overflow-y-auto">
               {filtered.map(c => (
                 <li key={c.id}>
                   <button
@@ -109,7 +109,7 @@ export function ClientWorkSelector({ onSelect, onSelectOthers, onSelectUnallocat
       )}
 
       {/* Alternatives */}
-      <div className="flex flex-col gap-2 pt-1 border-t border-brand-100">
+      <div className="flex flex-col gap-2 pt-1 border-t border-brand-200">
         <button
           onClick={onSelectOthers}
           className="flex items-center gap-2 px-4 py-3 rounded-xl border border-dashed border-amber-300 text-sm text-amber-700 hover:bg-amber-50 transition-colors"
@@ -119,7 +119,7 @@ export function ClientWorkSelector({ onSelect, onSelectOthers, onSelectUnallocat
         </button>
         <button
           onClick={onSelectUnallocated}
-          className="flex items-center gap-2 px-4 py-3 rounded-xl border border-dashed border-brand-100 text-sm text-gray-400 hover:border-brand-200 hover:text-gray-600 transition-colors"
+          className="flex items-center gap-2 px-4 py-3 rounded-xl border border-dashed border-brand-200 text-sm text-gray-500 hover:border-brand-300 hover:text-gray-700 transition-colors"
         >
           <span className="text-xs font-semibold px-1.5 py-0.5 bg-brand-50 rounded text-brand-500">—</span>
           Unallocated (no client this session)

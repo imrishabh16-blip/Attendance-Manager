@@ -24,7 +24,7 @@ export function Thead({ children }: TableProps) {
 }
 
 export function Tbody({ children }: TableProps) {
-  return <tbody className="divide-y divide-gray-50">{children}</tbody>
+  return <tbody className="divide-y divide-brand-100">{children}</tbody>
 }
 
 export function Th({ children, className }: TableProps) {
