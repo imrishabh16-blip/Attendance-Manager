@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
+import { useQuery } from '@tanstack/react-query'
 import { getSupabaseBrowserClient } from '@/lib/supabase/client'
 import { Input } from '@/components/ui/Input'
 import { Spinner } from '@/components/ui/Spinner'
@@ -17,24 +18,48 @@ interface Props {
 export function ClientWorkSelector({ onSelect, onSelectOthers, onSelectUnallocated }: Props) {
   const supabase = getSupabaseBrowserClient()
 
-  const [workTypes, setWorkTypes]   = useState<string[]>([])
-  const [workType, setWorkType]     = useState<string>('')
-  const [clients, setClients]       = useState<ClientRow[]>([])
-  const [query, setQuery]           = useState('')
-  const [loading, setLoading]       = useState(true)
+  // React Query caches both datasets at the QueryClient level (app root).
+  // When the modal closes, ClientWorkSelector unmounts but the cache survives.
+  // On the next check-in (remount), useQuery returns cached data synchronously —
+  // isLoading is already false, no spinner shown — and refetches silently in the
+  // background only after the staleTime configured in QueryProvider has elapsed.
+  const { data: workTypesData, isLoading: wtLoading } = useQuery({
+    queryKey: ['work_types'],
+    queryFn: async () => {
+      const { data } = await supabase.from('work_types').select('id, name').order('name')
+      return ((data ?? []) as WorkTypeRow[]).map(r => r.name)
+    },
+  })
 
+  const { data: clientsData, isLoading: clientsLoading } = useQuery({
+    queryKey: ['clients'],
+    queryFn: async () => {
+      const { data } = await supabase.from('clients').select('id, name').order('name')
+      return (data ?? []) as ClientRow[]
+    },
+  })
+
+  const workTypes = workTypesData ?? []
+  const clients   = clientsData   ?? []
+  const loading   = wtLoading || clientsLoading
+
+  // workType and query are local UI state — intentionally NOT cached.
+  // They reset on every modal open, which is the correct behaviour.
+  //
+  // Lazy initialiser picks up the first work type from cache when data is
+  // already available at mount time (warm cache). If cache is cold, workType
+  // starts as '' and the effect below sets the default once data arrives.
+  const [workType, setWorkType] = useState<string>(() => workTypes[0] ?? '')
+  const [query,    setQuery]    = useState('')
+
+  // Set the default work type once data first arrives (cold first-fetch path).
+  // Functional update — `prev || workTypes[0]` — means this never overwrites
+  // a selection the user has already made.
   useEffect(() => {
-    Promise.all([
-      supabase.from('work_types').select('id, name').order('name'),
-      supabase.from('clients').select('id, name').order('name'),
-    ]).then(([wtRes, clRes]) => {
-      const wts = ((wtRes.data ?? []) as WorkTypeRow[]).map(r => r.name)
-      setWorkTypes(wts)
-      if (wts.length > 0) setWorkType(wts[0])
-      setClients((clRes.data ?? []) as ClientRow[])
-      setLoading(false)
-    })
-  }, [supabase])
+    if (workTypes.length > 0) {
+      setWorkType(prev => prev || workTypes[0])
+    }
+  }, [workTypes])
 
   const filtered = query.trim()
     ? clients.filter(c => c.name.toLowerCase().includes(query.toLowerCase()))
