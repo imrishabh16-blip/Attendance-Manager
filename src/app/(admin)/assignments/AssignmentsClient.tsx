@@ -1,6 +1,7 @@
 'use client'
 
 import { useState } from 'react'
+import { useQueryClient } from '@tanstack/react-query'
 import { Modal } from '@/components/ui/Modal'
 import { Button } from '@/components/ui/Button'
 import { Input } from '@/components/ui/Input'
@@ -9,7 +10,7 @@ import { Card } from '@/components/ui/Card'
 import { workTypeBadgeColor, cn } from '@/lib/utils'
 import toast from 'react-hot-toast'
 import { getSupabaseBrowserClient } from '@/lib/supabase/client'
-import { Plus, Search, Archive, Trash2 } from 'lucide-react'
+import { Plus, Search, Archive, Trash2, Upload, FileDown, CheckCircle2, AlertCircle } from 'lucide-react'
 import type { Assignment, Client, UserRole } from '@/types/app'
 import { useRouter } from 'next/navigation'
 
@@ -22,7 +23,14 @@ interface Props {
   role:        UserRole
 }
 
-type Tab = 'assignments' | 'clients' | 'work_types'
+type Tab        = 'assignments' | 'clients' | 'work_types'
+type ImportStep = 'upload' | 'preview' | 'importing' | 'done'
+
+interface ImportResults {
+  imported: number
+  skipped:  number
+  errors:   number
+}
 
 export default function AssignmentsClient({
   assignments: initial,
@@ -30,8 +38,9 @@ export default function AssignmentsClient({
   workTypes: initialWorkTypes,
   role: _role,
 }: Props) {
-  const supabase = getSupabaseBrowserClient()
-  const router   = useRouter()
+  const supabase      = getSupabaseBrowserClient()
+  const router        = useRouter()
+  const queryClient   = useQueryClient()
 
   // ── Tab ───────────────────────────────────────────────────────────────
   const [tab, setTab] = useState<Tab>('assignments')
@@ -107,6 +116,84 @@ export default function AssignmentsClient({
     toast.success('Client removed')
   }
 
+  // ── Import ────────────────────────────────────────────────────────────
+  const [showImport, setShowImport]       = useState(false)
+  const [importStep, setImportStep]       = useState<ImportStep>('upload')
+  const [importFile, setImportFile]       = useState<File | null>(null)
+  const [parsedNames, setParsedNames]     = useState<string[]>([])
+  const [importParsing, setImportParsing] = useState(false)
+  const [importError, setImportError]     = useState<string | null>(null)
+  const [importResults, setImportResults] = useState<ImportResults | null>(null)
+
+  function openImport() {
+    setImportStep('upload')
+    setImportFile(null)
+    setParsedNames([])
+    setImportParsing(false)
+    setImportError(null)
+    setImportResults(null)
+    setShowImport(true)
+  }
+
+  function closeImport() {
+    setShowImport(false)
+  }
+
+  async function parseImportFile() {
+    if (!importFile) return
+    setImportParsing(true)
+    setImportError(null)
+
+    const fd = new FormData()
+    fd.append('file', importFile)
+
+    try {
+      const res  = await fetch('/api/clients/import', { method: 'POST', body: fd })
+      const json = await res.json()
+      if (!res.ok) {
+        setImportError(json.error ?? 'Failed to parse file.')
+        setImportParsing(false)
+        return
+      }
+      setParsedNames(json.names as string[])
+      setImportStep('preview')
+    } catch {
+      setImportError('Network error — please try again.')
+    }
+    setImportParsing(false)
+  }
+
+  async function runImport(toAdd: string[], skippedCount: number) {
+    setImportStep('importing')
+
+    // Parallel inserts through the browser Supabase client — RLS applies normally.
+    const insertResults = await Promise.all(
+      toAdd.map(async (name) => {
+        const { error } = await supabase
+          .from('clients')
+          .insert({ name })
+          .select('id')
+          .single()
+        return { name, ok: !error }
+      })
+    )
+
+    const imported = insertResults.filter(r => r.ok).length
+    const errors   = insertResults.filter(r => !r.ok).length
+
+    // Refresh the local clients list and the React Query cache used by
+    // ClientWorkSelector so article users see new clients on their next check-in.
+    const { data: fresh } = await supabase
+      .from('clients')
+      .select('id, name')
+      .order('name')
+    if (fresh) setClients(fresh as Client[])
+    queryClient.invalidateQueries({ queryKey: ['clients'] })
+
+    setImportResults({ imported, skipped: skippedCount, errors })
+    setImportStep('done')
+  }
+
   // ── Work Types ────────────────────────────────────────────────────────
   const [workTypes, setWorkTypes]       = useState(initialWorkTypes)
   const [wtQuery, setWtQuery]           = useState('')
@@ -144,6 +231,11 @@ export default function AssignmentsClient({
     work_types:  'Work Types',
   }
 
+  // Computed inside render so it's always fresh when the preview step is visible
+  const existingLower = new Set(clients.map(c => c.name.toLowerCase()))
+  const toAdd         = parsedNames.filter(n => !existingLower.has(n.toLowerCase()))
+  const alreadyExist  = parsedNames.filter(n =>  existingLower.has(n.toLowerCase()))
+
   return (
     <div className="min-h-screen bg-brand-100">
       {/* Header */}
@@ -156,9 +248,14 @@ export default function AssignmentsClient({
             </Button>
           )}
           {tab === 'clients' && (
-            <Button onClick={() => setAddClient(true)} size="sm">
-              <Plus className="h-4 w-4" /> Add Client
-            </Button>
+            <div className="flex items-center gap-2">
+              <Button onClick={openImport} size="sm" variant="secondary">
+                <Upload className="h-4 w-4" /> Import
+              </Button>
+              <Button onClick={() => setAddClient(true)} size="sm">
+                <Plus className="h-4 w-4" /> Add Client
+              </Button>
+            </div>
           )}
           {tab === 'work_types' && (
             <Button onClick={() => setAddWt(true)} size="sm">
@@ -355,7 +452,7 @@ export default function AssignmentsClient({
         )}
       </div>
 
-      {/* Create Assignment modal */}
+      {/* ── Create Assignment modal ── */}
       <Modal open={showCreate} onClose={() => setShowCreate(false)} title="New Assignment">
         <div className="flex flex-col gap-4">
           <Input label="Client Name" placeholder="e.g. ABC Pvt Ltd"
@@ -378,7 +475,7 @@ export default function AssignmentsClient({
         </div>
       </Modal>
 
-      {/* Add Client modal */}
+      {/* ── Add Client modal ── */}
       <Modal open={showAddClient} onClose={() => setAddClient(false)} title="Add Client">
         <div className="flex flex-col gap-4">
           <Input label="Client Name" placeholder="e.g. ABC Pvt Ltd"
@@ -387,7 +484,7 @@ export default function AssignmentsClient({
         </div>
       </Modal>
 
-      {/* Add Work Type modal */}
+      {/* ── Add Work Type modal ── */}
       <Modal open={showAddWt} onClose={() => setAddWt(false)} title="Add Work Type">
         <div className="flex flex-col gap-4">
           <Input label="Work Type Name" placeholder="e.g. Statutory Audit"
@@ -395,6 +492,220 @@ export default function AssignmentsClient({
           <Button onClick={addWorkType} loading={savingWt} className="w-full">Add Work Type</Button>
         </div>
       </Modal>
+
+      {/* ── Import Clients modal ── */}
+      <Modal
+        open={showImport}
+        onClose={importStep === 'importing' ? () => {} : closeImport}
+        title="Import Clients"
+      >
+        {/* ── Step 1: Upload ── */}
+        {importStep === 'upload' && (
+          <div className="flex flex-col gap-5">
+            {/* Template download */}
+            <div className="bg-brand-50 rounded-xl px-4 py-3 flex items-start gap-3">
+              <FileDown className="h-4 w-4 text-brand-500 flex-shrink-0 mt-0.5" />
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-medium text-gray-800">Download template first</p>
+                <p className="text-xs text-gray-500 mt-0.5">
+                  Fill column A with one client name per row, starting from row 2.
+                </p>
+                <a
+                  href="/api/clients/import"
+                  download="client_import_template.xlsx"
+                  className="inline-flex items-center gap-1.5 mt-2 text-xs font-medium text-brand-600 hover:text-brand-700"
+                >
+                  <FileDown className="h-3.5 w-3.5" />
+                  client_import_template.xlsx
+                </a>
+              </div>
+            </div>
+
+            {/* File picker */}
+            <div className="flex flex-col gap-2">
+              <label className="text-sm font-medium text-gray-700">
+                Select file <span className="text-gray-400 font-normal">(.xlsx or .csv)</span>
+              </label>
+              <input
+                type="file"
+                accept=".xlsx,.xls,.csv"
+                onChange={e => {
+                  setImportFile(e.target.files?.[0] ?? null)
+                  setImportError(null)
+                }}
+                className="block w-full text-sm text-gray-600
+                  file:mr-3 file:py-2 file:px-4
+                  file:rounded-lg file:border-0
+                  file:text-sm file:font-medium
+                  file:bg-brand-50 file:text-brand-700
+                  hover:file:bg-brand-100
+                  cursor-pointer"
+              />
+              {importFile && (
+                <p className="text-xs text-gray-500">
+                  Selected: <span className="font-medium text-gray-700">{importFile.name}</span>
+                  {' '}({(importFile.size / 1024).toFixed(1)} KB)
+                </p>
+              )}
+            </div>
+
+            {importError && (
+              <p className="text-sm text-red-600 bg-red-50 px-3 py-2.5 rounded-xl flex items-start gap-2">
+                <AlertCircle className="h-4 w-4 flex-shrink-0 mt-0.5" />
+                {importError}
+              </p>
+            )}
+
+            <Button
+              onClick={parseImportFile}
+              loading={importParsing}
+              disabled={!importFile}
+              className="w-full"
+            >
+              Preview Import
+            </Button>
+          </div>
+        )}
+
+        {/* ── Step 2: Preview ── */}
+        {importStep === 'preview' && (
+          <div className="flex flex-col gap-4">
+            {/* Summary chips */}
+            <div className="flex gap-3 flex-wrap">
+              <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-green-50 text-green-700 text-sm font-medium">
+                <CheckCircle2 className="h-4 w-4" />
+                {toAdd.length} new
+              </div>
+              {alreadyExist.length > 0 && (
+                <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-gray-100 text-gray-500 text-sm font-medium">
+                  {alreadyExist.length} already exist
+                </div>
+              )}
+            </div>
+
+            {toAdd.length === 0 ? (
+              <div className="text-center py-6">
+                <p className="text-sm font-medium text-gray-700">Nothing to import</p>
+                <p className="text-xs text-gray-400 mt-1">
+                  All {parsedNames.length} client{parsedNames.length !== 1 ? 's' : ''} in the file already exist.
+                </p>
+              </div>
+            ) : (
+              <>
+                <div className="flex flex-col gap-1">
+                  <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide px-1">
+                    Will be imported
+                  </p>
+                  <ul className="max-h-48 overflow-y-auto divide-y divide-brand-100 rounded-xl border border-brand-200 bg-white">
+                    {toAdd.map(name => (
+                      <li key={name} className="px-4 py-2.5 text-sm text-gray-800">
+                        {name}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+
+                {alreadyExist.length > 0 && (
+                  <div className="flex flex-col gap-1">
+                    <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide px-1">
+                      Already exist — will be skipped
+                    </p>
+                    <ul className="max-h-24 overflow-y-auto divide-y divide-gray-100 rounded-xl border border-gray-200 bg-gray-50">
+                      {alreadyExist.map(name => (
+                        <li key={name} className="px-4 py-2 text-sm text-gray-400 line-through">
+                          {name}
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+              </>
+            )}
+
+            <div className="flex gap-3">
+              <Button
+                variant="secondary"
+                onClick={() => setImportStep('upload')}
+                className="flex-1"
+              >
+                Back
+              </Button>
+              <Button
+                onClick={() => runImport(toAdd, alreadyExist.length)}
+                disabled={toAdd.length === 0}
+                className="flex-1"
+              >
+                Import {toAdd.length > 0 ? `${toAdd.length} ` : ''}Client{toAdd.length !== 1 ? 's' : ''}
+              </Button>
+            </div>
+          </div>
+        )}
+
+        {/* ── Step 3: Importing ── */}
+        {importStep === 'importing' && (
+          <div className="flex flex-col items-center gap-4 py-8">
+            <div className="w-10 h-10 rounded-full border-4 border-brand-200 border-t-brand-600 animate-spin" />
+            <p className="text-sm font-medium text-gray-700">Importing clients…</p>
+            <p className="text-xs text-gray-400">Please don't close this window.</p>
+          </div>
+        )}
+
+        {/* ── Step 4: Done ── */}
+        {importStep === 'done' && importResults && (
+          <div className="flex flex-col gap-5">
+            <div className="flex flex-col gap-3">
+              <ResultRow
+                icon={<CheckCircle2 className="h-5 w-5 text-green-600" />}
+                label="Imported"
+                count={importResults.imported}
+                color="text-green-700"
+              />
+              <ResultRow
+                icon={<div className="w-5 h-5 rounded-full bg-gray-200 flex items-center justify-center text-gray-500 text-xs font-bold">–</div>}
+                label="Already existed (skipped)"
+                count={importResults.skipped}
+                color="text-gray-500"
+              />
+              {importResults.errors > 0 && (
+                <ResultRow
+                  icon={<AlertCircle className="h-5 w-5 text-red-500" />}
+                  label="Failed to import"
+                  count={importResults.errors}
+                  color="text-red-600"
+                />
+              )}
+            </div>
+
+            {importResults.errors > 0 && (
+              <p className="text-xs text-gray-400 bg-gray-50 px-3 py-2 rounded-xl">
+                Some clients could not be imported. This may indicate a duplicate that was
+                added by another admin during the import, or a database constraint. You can
+                add them individually using "Add Client."
+              </p>
+            )}
+
+            <Button onClick={closeImport} className="w-full">Done</Button>
+          </div>
+        )}
+      </Modal>
+    </div>
+  )
+}
+
+// ── Small helper for the results step ─────────────────────────────────────────
+function ResultRow({
+  icon, label, count, color,
+}: {
+  icon: React.ReactNode
+  label: string
+  count: number
+  color: string
+}) {
+  return (
+    <div className="flex items-center gap-3 px-4 py-3 bg-white rounded-xl border border-brand-200">
+      {icon}
+      <span className="flex-1 text-sm text-gray-700">{label}</span>
+      <span className={`text-lg font-bold ${color}`}>{count}</span>
     </div>
   )
 }
