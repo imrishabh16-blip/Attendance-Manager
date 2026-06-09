@@ -242,11 +242,6 @@ export default function AssignmentsClient({
       <div className="bg-white border-b border-brand-200 px-4 sm:px-6 py-4">
         <div className="max-w-5xl mx-auto flex items-center justify-between">
           <h1 className="text-lg font-bold text-gray-900">Assignments</h1>
-          {tab === 'assignments' && (
-            <Button onClick={() => setShowCreate(true)} size="sm">
-              <Plus className="h-4 w-4" /> New Assignment
-            </Button>
-          )}
           {tab === 'clients' && (
             <div className="flex items-center gap-2">
               <Button onClick={openImport} size="sm" variant="secondary">
@@ -318,10 +313,10 @@ export default function AssignmentsClient({
               <button
                 onClick={() => setWtFilter('all')}
                 className={cn(
-                  'flex-shrink-0 px-3 py-1.5 rounded-full text-xs font-medium transition-colors',
+                  'flex-shrink-0 px-3 py-1.5 rounded-full text-xs font-medium transition-colors border',
                   wtFilter === 'all'
-                    ? 'bg-brand-600 text-white'
-                    : 'bg-white border border-brand-200 text-gray-600 hover:bg-brand-50'
+                    ? 'bg-brand-600 text-white border-brand-600'
+                    : 'bg-white border-brand-200 text-brand-700 hover:bg-brand-50'
                 )}
               >
                 All Types
@@ -333,8 +328,8 @@ export default function AssignmentsClient({
                   className={cn(
                     'flex-shrink-0 px-3 py-1.5 rounded-full text-xs font-medium transition-colors border',
                     wtFilter === wt.name
-                      ? cn(workTypeBadgeColor(wt.name), 'border-transparent ring-2 ring-offset-1 ring-brand-300')
-                      : 'bg-white border-brand-200 text-gray-600 hover:bg-brand-50'
+                      ? 'bg-brand-600 text-white border-brand-600'
+                      : 'bg-white border-brand-200 text-brand-700 hover:bg-brand-50'
                   )}
                 >
                   {wt.name}
