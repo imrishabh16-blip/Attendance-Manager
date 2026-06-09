@@ -49,8 +49,8 @@ export function ArticleStatusGroups({ liveActivity, onLeaveArticles }: Props) {
   const now = useMinuteTick()
   const [activeGroup, setActiveGroup] = useState<GroupKey | null>(null)
 
-  const assigned    = liveActivity.filter(r => r.attendance_type === 'regular')
-  const unallocated = liveActivity.filter(r => r.attendance_type !== 'regular')
+  const assigned    = liveActivity.filter(r => r.attendance_type === 'regular' || r.attendance_type === 'others')
+  const unallocated = liveActivity.filter(r => r.attendance_type === 'unallocated')
 
   const modalTitles: Record<GroupKey, string> = {
     assigned:    'Assigned',

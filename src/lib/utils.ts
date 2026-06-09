@@ -7,7 +7,12 @@ export function cn(...inputs: ClassValue[]) {
 }
 
 export function formatTime(iso: string): string {
-  return format(new Date(iso), 'hh:mm a')
+  return new Date(iso).toLocaleString('en-IN', {
+    timeZone: 'Asia/Kolkata',
+    hour:     '2-digit',
+    minute:   '2-digit',
+    hour12:   true,
+  })
 }
 
 export function formatDate(iso: string): string {

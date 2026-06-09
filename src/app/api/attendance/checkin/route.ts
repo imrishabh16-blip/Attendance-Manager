@@ -38,6 +38,9 @@ export async function POST(req: NextRequest) {
   // IST date — UTC split gives wrong date between midnight and 05:30 IST
   const today = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' })
 
+  // Admin client needed for stale-record auto-close and final insert
+  const admin = createAdminClient()
+
   // --- Block if ANY prior session is still open (across all dates) ---
   const { data: openRecord } = await supabase
     .from('attendance_records')
@@ -48,14 +51,25 @@ export async function POST(req: NextRequest) {
     .maybeSingle()
 
   if (openRecord) {
-    return NextResponse.json(
-      {
-        error: `You have an unclosed check-in from ${openRecord.attendance_date}. Please check out first.`,
-        open_record_id:   openRecord.id,
-        open_record_date: openRecord.attendance_date,
-      },
-      { status: 409 }
-    )
+    if (openRecord.attendance_date === today) {
+      // Same-day open record — block as before
+      return NextResponse.json(
+        {
+          error: `You have an unclosed check-in from ${openRecord.attendance_date}. Please check out first.`,
+          open_record_id:   openRecord.id,
+          open_record_date: openRecord.attendance_date,
+        },
+        { status: 409 }
+      )
+    }
+    // Stale record from a previous day — auto-close at 23:59:59 IST and continue
+    await admin
+      .from('attendance_records')
+      .update({
+        checked_out_at: new Date(`${openRecord.attendance_date}T23:59:59+05:30`).toISOString(),
+        note:           'Auto-closed: check-out not recorded',
+      })
+      .eq('id', openRecord.id)
   }
 
   // --- Block check-in if leave is already marked for today ---
@@ -74,7 +88,6 @@ export async function POST(req: NextRequest) {
   }
 
   // --- Resolve assignment for 'regular' attendance (find or auto-create) ---
-  const admin = createAdminClient()
   let resolvedAssignmentId: string | null = null
 
   if (attendance_type === 'regular') {
