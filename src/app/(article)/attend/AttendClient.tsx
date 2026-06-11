@@ -32,6 +32,21 @@ type Step =
   | 'note_input'
   | 'submitting'
 
+function getFirstName(full: string): string {
+  return full.split(' ')[0] || full
+}
+
+function getGreeting(): { text: string; sub: string } {
+  const hour = parseInt(
+    new Date().toLocaleString('en-US', { timeZone: 'Asia/Kolkata', hour: '2-digit', hour12: false }),
+    10
+  )
+  if (hour >= 5  && hour < 12) return { text: 'Good Morning',   sub: 'Ready to check in?' }
+  if (hour >= 12 && hour < 17) return { text: 'Good Afternoon', sub: "Hope you're having a productive day." }
+  if (hour >= 17 && hour < 21) return { text: 'Good Evening',   sub: "Hope you're having a productive day." }
+  return                               { text: 'Hey',            sub: "Hope you're having a productive day." }
+}
+
 export default function AttendClient({ profile }: Props) {
   const { state: gpsState, acquire }                        = useGPS()
   const { todayRecords, openRecord, todayLeave, loading, refresh } = useAttendanceSession(profile.id)
@@ -188,6 +203,9 @@ export default function AttendClient({ profile }: Props) {
 
   // ── RENDER ─────────────────────────────────────────────────────────────
 
+  const firstName = getFirstName(profile.full_name)
+  const { text: greetingText, sub: greetingSub } = getGreeting()
+
   // true when the note_input modal belongs to the checkout path
   const isCheckoutFlow = step === 'note_input' && !!openRecord && !!gpsCoords
 
@@ -211,6 +229,14 @@ export default function AttendClient({ profile }: Props) {
           <div className="flex justify-center py-12"><Spinner /></div>
         ) : (
           <>
+            {/* Greeting */}
+            <div>
+              <p className="text-xl font-semibold text-gray-900">
+                {greetingText}, {firstName} 👋
+              </p>
+              <p className="text-sm text-gray-500 mt-1">{greetingSub}</p>
+            </div>
+
             {/* Primary action */}
             {step === 'idle' && (
               openRecord ? (
