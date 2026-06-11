@@ -36,8 +36,7 @@ export default async function AssignmentDetailPage({
   if (!assignment) notFound()
 
   // Fetch recent attendance sessions for this assignment.
-  // Note: Supabase returns joined rows as an array even for many-to-one
-  // relationships when using the string join syntax.
+  // profiles!article_id is a many-to-one join; Supabase returns it as an array.
   const { data: sessions } = await supabase
     .from('attendance_records')
     .select('id, article_id, attendance_date, checked_in_at, checked_out_at, checked_in_lat, checked_in_lng, note, profiles!article_id(full_name)')
@@ -147,7 +146,6 @@ export default async function AssignmentDetailPage({
                   checked_in_lat: number | null
                   checked_in_lng: number | null
                   note: string | null
-                  // Supabase string-join returns array even for many-to-one
                   profiles: { full_name: string }[] | null
                 }) => {
                   const durationMins = Math.round(
