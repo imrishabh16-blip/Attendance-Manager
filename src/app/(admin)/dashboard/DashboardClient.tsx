@@ -4,17 +4,39 @@ import { useState } from 'react'
 import { useRealtimeDashboard } from '@/hooks/useRealtimeDashboard'
 import { MetricCard } from '@/components/dashboard/MetricCard'
 import { LiveActivityTable } from '@/components/dashboard/LiveActivityTable'
-import { ArticleStatusGroups } from '@/components/dashboard/ArticleStatusGroups'
 import { Card, CardHeader, CardBody } from '@/components/ui/Card'
 import { Modal } from '@/components/ui/Modal'
+import { Table, Thead, Tbody, Th, Td } from '@/components/ui/Table'
+import { getSupabaseBrowserClient } from '@/lib/supabase/client'
 import { RefreshCw, UserCheck, UserX, Users, Flag, ChevronDown, Search } from 'lucide-react'
-import { cn } from '@/lib/utils'
+import { cn, formatTime, workTypeBadgeColor } from '@/lib/utils'
+import type { AttendanceType } from '@/types/app'
 
 interface Props {
   profile: { id: string; full_name: string; role: string }
 }
 
-// File-local search input used in all three dashboard modals
+interface TodaySessionRow {
+  id:                 string
+  checked_in_at:      string
+  checked_out_at:     string | null
+  attendance_type:    AttendanceType
+  others_client_name: string | null
+  profiles:           { full_name: string }[] | null
+  assignments:        { client_name: string; work_type: string } | null
+}
+
+function sessionArticleName(row: TodaySessionRow): string {
+  return (Array.isArray(row.profiles) && row.profiles[0]?.full_name) || '—'
+}
+
+function sessionAssignment(row: TodaySessionRow): { label: string; workType: string | null } {
+  if (row.attendance_type === 'unallocated') return { label: 'Unallocated', workType: null }
+  if (row.attendance_type === 'others')      return { label: row.others_client_name ?? 'Others', workType: null }
+  if (row.assignments)                       return { label: row.assignments.client_name, workType: row.assignments.work_type }
+  return { label: '—', workType: null }
+}
+
 function ModalSearch({ value, onChange }: { value: string; onChange: (v: string) => void }) {
   return (
     <div className="relative mb-4">
@@ -30,38 +52,62 @@ function ModalSearch({ value, onChange }: { value: string; onChange: (v: string)
 }
 
 export default function DashboardClient({ profile: _ }: Props) {
+  const supabase = getSupabaseBrowserClient()
   const { summary, liveActivity, onLeaveArticles, loading, refresh } = useRealtimeDashboard()
 
   const s = summary
 
-  // Modal open states
-  const [checkedInOpen,   setCheckedInOpen]   = useState(false)
-  const [unallocatedOpen, setUnallocatedOpen] = useState(false)
-  const [onLeaveOpen,     setOnLeaveOpen]     = useState(false)
+  // ── Checked In Today modal — lazy loaded ─────────────────────────────────
+  const [checkedInOpen,        setCheckedInOpen]        = useState(false)
+  const [checkedInSearch,      setCheckedInSearch]      = useState('')
+  const [todaySessionsData,    setTodaySessionsData]    = useState<TodaySessionRow[] | null>(null)
+  const [todaySessionsLoading, setTodaySessionsLoading] = useState(false)
 
-  // Modal search states
-  const [checkedInSearch,   setCheckedInSearch]   = useState('')
+  async function openCheckedInModal() {
+    setCheckedInOpen(true)
+    setTodaySessionsLoading(true)
+    setTodaySessionsData(null)
+    const today = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' })
+    const { data } = await supabase
+      .from('attendance_records')
+      .select(`
+        id, checked_in_at, checked_out_at, attendance_type, others_client_name,
+        profiles!article_id(full_name),
+        assignments(client_name, work_type)
+      `)
+      .eq('attendance_date', today)
+      .not('checked_in_at', 'is', null)
+      .order('checked_in_at', { ascending: false })
+    setTodaySessionsData((data ?? []) as TodaySessionRow[])
+    setTodaySessionsLoading(false)
+  }
+
+  const filteredTodaySessions = checkedInSearch.trim() && todaySessionsData
+    ? todaySessionsData.filter(r =>
+        sessionArticleName(r).toLowerCase().includes(checkedInSearch.toLowerCase())
+      )
+    : (todaySessionsData ?? [])
+
+  // ── Unallocated modal ─────────────────────────────────────────────────────
+  const [unallocatedOpen,   setUnallocatedOpen]   = useState(false)
   const [unallocatedSearch, setUnallocatedSearch] = useState('')
-  const [onLeaveSearch,     setOnLeaveSearch]     = useState('')
 
-  // Currently Checked In section — collapsed by default
-  const [liveExpanded, setLiveExpanded] = useState(false)
-
-  // Unallocated count derived from already-fetched liveActivity — no extra query
   const unallocatedRows = liveActivity.filter(r => r.attendance_type === 'unallocated')
-
-  // Filtered rows for modals
-  const filteredCheckedIn = checkedInSearch.trim()
-    ? liveActivity.filter(r => r.article_name.toLowerCase().includes(checkedInSearch.toLowerCase()))
-    : liveActivity
 
   const filteredUnallocated = unallocatedSearch.trim()
     ? unallocatedRows.filter(r => r.article_name.toLowerCase().includes(unallocatedSearch.toLowerCase()))
     : unallocatedRows
 
+  // ── On Leave modal ────────────────────────────────────────────────────────
+  const [onLeaveOpen,   setOnLeaveOpen]   = useState(false)
+  const [onLeaveSearch, setOnLeaveSearch] = useState('')
+
   const filteredOnLeave = onLeaveSearch.trim()
     ? onLeaveArticles.filter(r => r.article_name.toLowerCase().includes(onLeaveSearch.toLowerCase()))
     : onLeaveArticles
+
+  // ── Currently Checked In section ──────────────────────────────────────────
+  const [liveExpanded, setLiveExpanded] = useState(false)
 
   return (
     <div className="min-h-screen bg-brand-100">
@@ -101,7 +147,6 @@ export default function DashboardClient({ profile: _ }: Props) {
               ))}
             </div>
             <div className="bg-white rounded-2xl border border-brand-200 shadow-sm h-40 animate-pulse" />
-            <div className="bg-white rounded-2xl border border-brand-200 shadow-sm h-32 animate-pulse" />
           </>
         ) : (
           <>
@@ -112,7 +157,7 @@ export default function DashboardClient({ profile: _ }: Props) {
                 value={s?.active_articles_today ?? 0}
                 icon={UserCheck}
                 color="green"
-                onClick={() => setCheckedInOpen(true)}
+                onClick={openCheckedInModal}
               />
               <MetricCard
                 label="Unallocated"
@@ -138,7 +183,7 @@ export default function DashboardClient({ profile: _ }: Props) {
               />
             </div>
 
-            {/* Currently Checked In — collapsed by default */}
+            {/* Currently Checked In — collapsible */}
             <Card>
               <CardHeader>
                 <button
@@ -161,29 +206,103 @@ export default function DashboardClient({ profile: _ }: Props) {
                 </CardBody>
               )}
             </Card>
-
-            {/* Article Status — Assigned only */}
-            <Card>
-              <CardHeader>
-                <h2 className="text-sm font-semibold text-gray-900">Article Status</h2>
-              </CardHeader>
-              <CardBody className="p-0">
-                <ArticleStatusGroups liveActivity={liveActivity} />
-              </CardBody>
-            </Card>
           </>
         )}
       </div>
 
-      {/* ── Checked In Today modal ── */}
+      {/* ── Checked In Today modal — lazy-loaded, responsive ── */}
       <Modal
         open={checkedInOpen}
-        onClose={() => { setCheckedInOpen(false); setCheckedInSearch('') }}
+        onClose={() => { setCheckedInOpen(false); setCheckedInSearch(''); setTodaySessionsData(null) }}
         title="Checked In Today"
         className="sm:max-w-2xl"
       >
         <ModalSearch value={checkedInSearch} onChange={setCheckedInSearch} />
-        <LiveActivityTable rows={filteredCheckedIn} />
+
+        {todaySessionsLoading ? (
+          <div className="space-y-2">
+            {[0, 1, 2].map(i => (
+              <div key={i} className="h-14 bg-brand-100 rounded-xl animate-pulse" />
+            ))}
+          </div>
+        ) : filteredTodaySessions.length === 0 ? (
+          <p className="text-sm text-gray-400 text-center py-6">No attendance records today</p>
+        ) : (
+          <>
+            {/* Mobile: stacked card list */}
+            <ul className="space-y-2 sm:hidden">
+              {filteredTodaySessions.map(row => {
+                const name       = sessionArticleName(row)
+                const assignment = sessionAssignment(row)
+                return (
+                  <li key={row.id} className="bg-brand-50 rounded-xl px-4 py-3 space-y-1">
+                    <p className="text-sm font-semibold text-gray-900">{name}</p>
+                    <div className="flex items-center gap-1.5 flex-wrap">
+                      <span className="text-xs text-gray-600">{assignment.label}</span>
+                      {assignment.workType && (
+                        <span className={cn('text-xs font-medium px-1.5 py-0.5 rounded-full', workTypeBadgeColor(assignment.workType))}>
+                          {assignment.workType}
+                        </span>
+                      )}
+                    </div>
+                    <p className="text-xs text-gray-500">
+                      {formatTime(row.checked_in_at)}
+                      {' → '}
+                      {row.checked_out_at
+                        ? formatTime(row.checked_out_at)
+                        : <span className="text-green-600 font-medium">Active</span>
+                      }
+                    </p>
+                  </li>
+                )
+              })}
+            </ul>
+
+            {/* Desktop: table */}
+            <div className="hidden sm:block">
+              <Table>
+                <Thead>
+                  <tr>
+                    <Th>Article</Th>
+                    <Th>Assignment</Th>
+                    <Th>Checked In</Th>
+                    <Th>Checked Out</Th>
+                  </tr>
+                </Thead>
+                <Tbody>
+                  {filteredTodaySessions.map(row => {
+                    const name       = sessionArticleName(row)
+                    const assignment = sessionAssignment(row)
+                    return (
+                      <tr key={row.id} className="hover:bg-brand-50">
+                        <Td>
+                          <span className="font-medium text-gray-900">{name}</span>
+                        </Td>
+                        <Td>
+                          <div className="flex flex-col gap-0.5">
+                            <span>{assignment.label}</span>
+                            {assignment.workType && (
+                              <span className={cn('text-xs font-medium px-1.5 py-0.5 rounded-full w-fit', workTypeBadgeColor(assignment.workType))}>
+                                {assignment.workType}
+                              </span>
+                            )}
+                          </div>
+                        </Td>
+                        <Td>{formatTime(row.checked_in_at)}</Td>
+                        <Td>
+                          {row.checked_out_at
+                            ? <span>{formatTime(row.checked_out_at)}</span>
+                            : <span className="text-green-600 font-medium">Active</span>
+                          }
+                        </Td>
+                      </tr>
+                    )
+                  })}
+                </Tbody>
+              </Table>
+            </div>
+          </>
+        )}
       </Modal>
 
       {/* ── Unallocated modal ── */}
