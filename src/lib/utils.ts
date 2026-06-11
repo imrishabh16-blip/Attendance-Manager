@@ -16,7 +16,12 @@ export function formatTime(iso: string): string {
 }
 
 export function formatDate(iso: string): string {
-  return format(new Date(iso), 'dd MMM yyyy')
+  return new Date(iso).toLocaleDateString('en-IN', {
+    timeZone: 'Asia/Kolkata',
+    day:      '2-digit',
+    month:    'short',
+    year:     'numeric',
+  })
 }
 
 export function formatDateTime(iso: string): string {

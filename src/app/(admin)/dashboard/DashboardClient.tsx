@@ -47,12 +47,17 @@ export default function DashboardClient({ profile: _ }: Props) {
     setCheckedInOpen(true)
     setTodaySessionsLoading(true)
     setTodaySessionsData(null)
-    const res = await fetch('/api/dashboard/today-sessions')
-    if (res.ok) {
-      const { data } = await res.json() as { data: TodaySessionRow[] }
-      setTodaySessionsData(data)
+    try {
+      const res = await fetch('/api/dashboard/today-sessions')
+      if (res.ok) {
+        const { data } = await res.json() as { data: TodaySessionRow[] }
+        setTodaySessionsData(data)
+      }
+    } catch {
+      // Network failure — loading cleared, modal shows empty state
+    } finally {
+      setTodaySessionsLoading(false)
     }
-    setTodaySessionsLoading(false)
   }
 
   const filteredTodaySessions = checkedInSearch.trim() && todaySessionsData
