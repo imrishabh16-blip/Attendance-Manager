@@ -7,7 +7,8 @@ import { LiveActivityTable } from '@/components/dashboard/LiveActivityTable'
 import { Card, CardHeader, CardBody } from '@/components/ui/Card'
 import { Modal } from '@/components/ui/Modal'
 import { Table, Thead, Tbody, Th, Td } from '@/components/ui/Table'
-import { RefreshCw, UserCheck, UserX, Users, Flag, ChevronDown, Search } from 'lucide-react'
+import { RefreshCw, UserCheck, UserX, Users, Flag, ChevronDown, Search, Download, Loader2 } from 'lucide-react'
+import toast from 'react-hot-toast'
 import { cn, formatTime, workTypeBadgeColor } from '@/lib/utils'
 import type { TodaySessionItem } from '@/app/api/dashboard/today-sessions/route'
 
@@ -91,6 +92,29 @@ export default function DashboardClient({ profile: _ }: Props) {
   const filteredAwol = awolSearch.trim()
     ? awolArticles.filter(r => r.article_name.toLowerCase().includes(awolSearch.toLowerCase()))
     : awolArticles
+
+  // ── Status Report download ────────────────────────────────────────────────
+  const [srLoading, setSrLoading] = useState(false)
+
+  async function downloadStatusReport() {
+    setSrLoading(true)
+    try {
+      const res = await fetch('/api/export/status-report')
+      if (!res.ok) { toast.error('Status report failed'); return }
+      const today = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' })
+      const blob  = await res.blob()
+      const url   = URL.createObjectURL(blob)
+      const a     = document.createElement('a')
+      a.href      = url
+      a.download  = `Status-Report-${today}.xlsx`
+      a.click()
+      URL.revokeObjectURL(url)
+    } catch {
+      toast.error('Status report failed')
+    } finally {
+      setSrLoading(false)
+    }
+  }
 
   // ── Currently Checked In section ──────────────────────────────────────────
   const [liveExpanded, setLiveExpanded] = useState(false)
@@ -228,6 +252,20 @@ export default function DashboardClient({ profile: _ }: Props) {
                 </CardBody>
               )}
             </Card>
+            {/* Status Report */}
+            <div className="flex justify-end pt-1">
+              <button
+                onClick={downloadStatusReport}
+                disabled={srLoading}
+                className="inline-flex items-center gap-2 px-4 py-2.5 text-sm font-medium bg-white text-brand-700 border border-brand-200 hover:bg-brand-50 rounded-xl transition-colors disabled:opacity-50"
+              >
+                {srLoading
+                  ? <Loader2 className="h-4 w-4 animate-spin" />
+                  : <Download className="h-4 w-4" />
+                }
+                Status Report
+              </button>
+            </div>
           </>
         )}
       </div>
