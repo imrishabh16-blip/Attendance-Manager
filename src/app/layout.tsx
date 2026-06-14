@@ -7,6 +7,9 @@ export const metadata: Metadata = {
   title: 'CA Attendance Manager',
   description: 'Article attendance and workload management for CA offices',
   manifest: '/manifest.json',
+  icons: {
+    apple: '/apple-touch-icon.png',
+  },
 }
 
 export const viewport: Viewport = {
