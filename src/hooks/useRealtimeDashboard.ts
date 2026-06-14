@@ -10,19 +10,22 @@ export function useRealtimeDashboard() {
   const [summary, setSummary]         = useState<DashboardSummary | null>(null)
   const [liveActivity, setLive]       = useState<LiveActivityRow[]>([])
   const [onLeaveArticles, setOnLeave] = useState<OnLeaveArticleRow[]>([])
+  const [awolArticles, setAwol]       = useState<OnLeaveArticleRow[]>([])
   const [loading, setLoading]         = useState(true)
   const timerRef                      = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   const refresh = useCallback(async () => {
-    const [summaryRes, liveRes, onLeaveRes] = await Promise.all([
+    const [summaryRes, liveRes, onLeaveRes, awolRes] = await Promise.all([
       supabase.rpc('get_dashboard_summary'),
       supabase.rpc('get_live_activity'),
       supabase.rpc('get_on_leave_articles'),
+      supabase.rpc('get_awol_articles'),
     ])
 
     if (summaryRes.data)  setSummary(summaryRes.data as DashboardSummary)
     if (liveRes.data)     setLive(liveRes.data as LiveActivityRow[])
     if (onLeaveRes.data)  setOnLeave(onLeaveRes.data as OnLeaveArticleRow[])
+    if (awolRes.data)     setAwol(awolRes.data as OnLeaveArticleRow[])
     setLoading(false)
   }, [supabase])
 
@@ -50,5 +53,5 @@ export function useRealtimeDashboard() {
     }
   }, [refresh, handleChange, supabase])
 
-  return { summary, liveActivity, onLeaveArticles, loading, refresh }
+  return { summary, liveActivity, onLeaveArticles, awolArticles, loading, refresh }
 }

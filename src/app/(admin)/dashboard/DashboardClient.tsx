@@ -33,7 +33,7 @@ function ModalSearch({ value, onChange }: { value: string; onChange: (v: string)
 }
 
 export default function DashboardClient({ profile: _ }: Props) {
-  const { summary, liveActivity, onLeaveArticles, loading, refresh } = useRealtimeDashboard()
+  const { summary, liveActivity, onLeaveArticles, awolArticles, loading, refresh } = useRealtimeDashboard()
 
   const s = summary
 
@@ -83,6 +83,14 @@ export default function DashboardClient({ profile: _ }: Props) {
   const filteredOnLeave = onLeaveSearch.trim()
     ? onLeaveArticles.filter(r => r.article_name.toLowerCase().includes(onLeaveSearch.toLowerCase()))
     : onLeaveArticles
+
+  // ── AWOL section ─────────────────────────────────────────────────────────
+  const [awolExpanded, setAwolExpanded] = useState(false)
+  const [awolSearch,   setAwolSearch]   = useState('')
+
+  const filteredAwol = awolSearch.trim()
+    ? awolArticles.filter(r => r.article_name.toLowerCase().includes(awolSearch.toLowerCase()))
+    : awolArticles
 
   // ── Currently Checked In section ──────────────────────────────────────────
   const [liveExpanded, setLiveExpanded] = useState(false)
@@ -181,6 +189,42 @@ export default function DashboardClient({ profile: _ }: Props) {
               {liveExpanded && (
                 <CardBody className="p-0">
                   <LiveActivityTable rows={liveActivity} />
+                </CardBody>
+              )}
+            </Card>
+
+            {/* AWOL — collapsible */}
+            <Card>
+              <CardHeader>
+                <button
+                  onClick={() => setAwolExpanded(e => !e)}
+                  className="flex items-center justify-between w-full group"
+                >
+                  <h2 className="text-sm font-semibold text-gray-900">
+                    AWOL ({awolArticles.length})
+                  </h2>
+                  <ChevronDown className={cn(
+                    'h-4 w-4 text-gray-400 transition-transform group-hover:text-gray-600',
+                    awolExpanded && 'rotate-180'
+                  )} />
+                </button>
+              </CardHeader>
+              {awolExpanded && (
+                <CardBody>
+                  <ModalSearch value={awolSearch} onChange={setAwolSearch} />
+                  {filteredAwol.length === 0 ? (
+                    <p className="text-sm text-gray-400 text-center py-4">
+                      {awolSearch.trim() ? 'No results' : 'All articles accounted for'}
+                    </p>
+                  ) : (
+                    <ul className="divide-y divide-brand-100">
+                      {filteredAwol.map(r => (
+                        <li key={r.article_id} className="py-3 text-sm font-medium text-gray-800">
+                          {r.article_name}
+                        </li>
+                      ))}
+                    </ul>
+                  )}
                 </CardBody>
               )}
             </Card>

@@ -63,16 +63,6 @@ export function todayISO(): string {
   return todayIST()
 }
 
-export function workTypeBadgeColor(wt: string): string {
-  const map: Record<string, string> = {
-    'Internal Audit':           'bg-purple-100 text-purple-700',
-    'Statutory Audit':          'bg-blue-100 text-blue-700',
-    'Tax Audit':                'bg-orange-100 text-orange-700',
-    'GST Compliance':           'bg-green-100 text-green-700',
-    'GST Litigation':           'bg-red-100 text-red-700',
-    'Income Tax Compliance':    'bg-teal-100 text-teal-700',
-    'Income Tax Litigation':    'bg-rose-100 text-rose-700',
-    'Others':                   'bg-gray-100 text-gray-700',
-  }
-  return map[wt] ?? 'bg-gray-100 text-gray-700'
+export function workTypeBadgeColor(_wt: string): string {
+  return 'bg-gray-100 text-gray-600'
 }
