@@ -1,5 +1,15 @@
 import ExcelJS from 'exceljs'
 
+export interface StatusReportRow {
+  article_name: string
+  status:       'Checked In' | 'Completed' | 'On Leave' | 'AWOL'
+  client:       string
+  work_type:    string
+  check_in:     string
+  check_out:    string
+  duration:     string
+}
+
 export interface AttendanceExportRow {
   article_name: string
   assignment_label: string
@@ -115,6 +125,59 @@ export async function buildAttendanceExcel(rows: AttendanceExportRow[]): Promise
   }
 
   ws.autoFilter = { from: 'A1', to: 'Q1' }
+
+  const buffer = await wb.xlsx.writeBuffer()
+  return Buffer.from(buffer)
+}
+
+const STATUS_COLORS: Record<string, string> = {
+  'Checked In': 'FF15803D',
+  'Completed':  'FF1D4ED8',
+  'On Leave':   'FFB45309',
+  'AWOL':       'FFB91C1C',
+}
+
+export async function buildStatusReportExcel(rows: StatusReportRow[], date: string): Promise<Buffer> {
+  const wb = new ExcelJS.Workbook()
+  wb.creator = 'CA Attendance Manager'
+  wb.created = new Date()
+
+  const ws = wb.addWorksheet('Status Report', {
+    views: [{ state: 'frozen', ySplit: 1 }],
+  })
+
+  ws.columns = [
+    { header: 'Article',    key: 'article_name', width: 24 },
+    { header: 'Status',     key: 'status',       width: 14 },
+    { header: 'Client',     key: 'client',       width: 32 },
+    { header: 'Work Type',  key: 'work_type',    width: 26 },
+    { header: 'Check In',   key: 'check_in',     width: 14 },
+    { header: 'Check Out',  key: 'check_out',    width: 14 },
+    { header: 'Duration',   key: 'duration',     width: 12 },
+  ]
+
+  applyHeaderStyle(ws.getRow(1))
+
+  // Title in A1 cell tooltip area — use sheet properties instead
+  ws.headerFooter.oddHeader = `&C&B Status Report — ${date}`
+
+  for (const row of rows) {
+    const r = ws.addRow({
+      article_name: row.article_name,
+      status:       row.status,
+      client:       row.client,
+      work_type:    row.work_type,
+      check_in:     row.check_in,
+      check_out:    row.check_out,
+      duration:     row.duration,
+    })
+    const color = STATUS_COLORS[row.status]
+    if (color) {
+      r.getCell('status').font = { bold: true, color: { argb: color } }
+    }
+  }
+
+  ws.autoFilter = { from: 'A1', to: 'G1' }
 
   const buffer = await wb.xlsx.writeBuffer()
   return Buffer.from(buffer)
