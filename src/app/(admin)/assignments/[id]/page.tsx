@@ -7,6 +7,14 @@ import { formatDate, formatTime, formatHours, workTypeBadgeColor, cn } from '@/l
 import { ArrowLeft, MapPin } from 'lucide-react'
 import { buildMapsLink } from '@/lib/gps'
 
+type ExperienceRow = {
+  article_id:     string
+  full_name:      string
+  total_sessions: number
+  first_worked:   string
+  last_worked:    string
+}
+
 export default async function AssignmentDetailPage({
   params,
 }: {
@@ -35,16 +43,21 @@ export default async function AssignmentDetailPage({
 
   if (!assignment) notFound()
 
-  // Fetch recent attendance sessions for this assignment.
-  // profiles!article_id is a many-to-one join; Supabase returns it as an array.
-  const { data: sessions } = await supabase
-    .from('attendance_records')
-    .select('id, article_id, attendance_date, checked_in_at, checked_out_at, checked_in_lat, checked_in_lng, note, profiles!article_id(full_name)')
-    .eq('assignment_id', id)
-    .not('checked_out_at', 'is', null)
-    .order('attendance_date', { ascending: false })
-    .order('checked_in_at', { ascending: false })
-    .limit(60)
+  // Fetch recent attendance sessions and aggregate experience in parallel.
+  const [{ data: sessions }, { data: experienceData }] = await Promise.all([
+    supabase
+      .from('attendance_records')
+      .select('id, article_id, attendance_date, checked_in_at, checked_out_at, checked_in_lat, checked_in_lng, note, profiles!article_id(full_name)')
+      .eq('assignment_id', id)
+      .not('checked_out_at', 'is', null)
+      .order('attendance_date', { ascending: false })
+      .order('checked_in_at', { ascending: false })
+      .limit(60),
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    (supabase as any).rpc('get_assignment_experience', { p_assignment_id: id }),
+  ])
+
+  const articleHistory = (experienceData ?? []) as ExperienceRow[]
 
   // Compute summary totals
   let totalHours = 0
@@ -117,8 +130,45 @@ export default async function AssignmentDetailPage({
         </div>
       </div>
 
-      {/* Attendance history */}
-      <div className="max-w-3xl mx-auto px-4 sm:px-6 py-5">
+      <div className="max-w-3xl mx-auto px-4 sm:px-6 py-5 space-y-4">
+        {/* Assignment Experience */}
+        {articleHistory.length > 0 && (
+          <Card>
+            <CardHeader>
+              <h2 className="text-sm font-semibold text-gray-900">Assignment Experience</h2>
+            </CardHeader>
+            <CardBody className="p-0">
+              <ul className="divide-y divide-brand-100">
+                {articleHistory.map(r => (
+                  <li
+                    key={r.article_id}
+                    className="px-5 py-3.5 flex items-center justify-between gap-4"
+                  >
+                    <span className="text-sm font-medium text-gray-900 truncate min-w-0">
+                      {r.full_name}
+                    </span>
+                    <div className="flex items-center gap-5 shrink-0 text-sm">
+                      <span>
+                        <span className="font-semibold text-gray-900">{r.total_sessions}</span>
+                        <span className="ml-1 text-xs text-gray-400">sessions</span>
+                      </span>
+                      <span className="hidden sm:inline text-right">
+                        <span className="text-xs text-gray-400 mr-1">first</span>
+                        <span className="text-gray-500">{formatDate(r.first_worked)}</span>
+                      </span>
+                      <span className="text-right">
+                        <span className="text-xs text-gray-400 mr-1">last</span>
+                        <span className="text-gray-600">{formatDate(r.last_worked)}</span>
+                      </span>
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            </CardBody>
+          </Card>
+        )}
+
+        {/* Attendance History */}
         <Card>
           <CardHeader>
             <h2 className="text-sm font-semibold text-gray-900">
