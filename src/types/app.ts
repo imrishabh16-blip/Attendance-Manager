@@ -6,6 +6,7 @@ export type WorkType = string
 export type AssignmentStatus = 'active' | 'archived'
 export type CycleStatus = 'active' | 'closed'
 export type AttendanceType = 'regular' | 'others' | 'unallocated'
+export type LeaveType = 'full_day' | 'first_half' | 'second_half'
 
 export interface Profile {
   id: string
@@ -69,10 +70,11 @@ export interface Client {
 }
 
 export interface LeaveRecord {
-  id: string
+  id:         string
   article_id: string
   leave_date: string
-  note: string | null
+  leave_type: LeaveType
+  note:       string | null
   created_at: string
 }
 
@@ -108,6 +110,7 @@ export interface LiveActivityRow {
 export interface OnLeaveArticleRow {
   article_id:   string
   article_name: string
+  leave_type:   LeaveType
 }
 
 export interface FlaggedRecord {

@@ -11,8 +11,8 @@ import { Card, CardBody } from '@/components/ui/Card'
 import { Badge } from '@/components/ui/Badge'
 import { Spinner } from '@/components/ui/Spinner'
 import { buildMapsLink } from '@/lib/gps'
-import { formatTime, formatDuration } from '@/lib/utils'
-import type { AttendanceRecord, WorkType } from '@/types/app'
+import { cn, formatTime, formatDuration } from '@/lib/utils'
+import type { AttendanceRecord, WorkType, LeaveType } from '@/types/app'
 import { MapPin, LogIn, LogOut, Calendar } from 'lucide-react'
 
 interface Props {
@@ -31,6 +31,18 @@ type Step =
   | 'others_form'
   | 'note_input'
   | 'submitting'
+
+const LEAVE_TYPE_LABELS: Record<LeaveType, string> = {
+  full_day:    'Full Day',
+  first_half:  'First Half',
+  second_half: 'Second Half',
+}
+
+const LEAVE_TYPE_SUBLABELS: Record<LeaveType, string> = {
+  full_day:    'Absent all day',
+  first_half:  'Morning off',
+  second_half: 'Afternoon off',
+}
 
 function getFirstName(full: string): string {
   return full.split(' ')[0] || full
@@ -56,6 +68,48 @@ export default function AttendClient({ profile }: Props) {
   const [othersName, setOthersName] = useState('')
   const [checkInMode, setCheckInMode] = useState<CheckInMode | null>(null)
   const [gpsCoords, setGpsCoords]   = useState<{ latitude: number; longitude: number } | null>(null)
+
+  // ── LEAVE MODAL ────────────────────────────────────────────────────────
+  const [leaveModalOpen, setLeaveModalOpen] = useState(false)
+  const [leaveLoading,   setLeaveLoading]   = useState(false)
+
+  async function handleMarkLeave(leave_type: LeaveType) {
+    setLeaveLoading(true)
+    const today = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' })
+    const res = await fetch('/api/leave', {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body:    JSON.stringify({ leave_date: today, leave_type }),
+    })
+    const json = await res.json().catch(() => ({}))
+    setLeaveLoading(false)
+    if (res.ok) {
+      toast.success(todayLeave ? 'Leave updated' : 'Leave marked')
+      setLeaveModalOpen(false)
+      refresh()
+    } else {
+      toast.error(json.error ?? 'Could not mark leave')
+    }
+  }
+
+  async function handleCancelLeave() {
+    setLeaveLoading(true)
+    const today = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' })
+    const res = await fetch('/api/leave', {
+      method:  'DELETE',
+      headers: { 'Content-Type': 'application/json' },
+      body:    JSON.stringify({ leave_date: today }),
+    })
+    const json = await res.json().catch(() => ({}))
+    setLeaveLoading(false)
+    if (res.ok) {
+      toast.success('Leave cancelled')
+      setLeaveModalOpen(false)
+      refresh()
+    } else {
+      toast.error(json.error ?? 'Could not cancel leave')
+    }
+  }
 
   // ── CHECK-IN FLOW ──────────────────────────────────────────────────────
 
@@ -176,31 +230,6 @@ export default function AttendClient({ profile }: Props) {
     await refresh()
   }
 
-  // ── LEAVE ──────────────────────────────────────────────────────────────
-
-  async function toggleLeave() {
-    const today = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' })
-    if (todayLeave) {
-      const res  = await fetch('/api/leave', {
-        method: 'DELETE',
-        headers: { 'Content-Type': 'application/json' },
-        body:    JSON.stringify({ leave_date: today }),
-      })
-      const json = await res.json().catch(() => ({}))
-      if (res.ok) { toast.success('Leave cancelled'); refresh() }
-      else        { toast.error(json.error ?? 'Could not cancel leave') }
-    } else {
-      const res  = await fetch('/api/leave', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body:    JSON.stringify({ leave_date: today }),
-      })
-      const json = await res.json().catch(() => ({}))
-      if (res.ok) { toast.success('Leave marked'); refresh() }
-      else        { toast.error(json.error ?? 'Could not mark leave') }
-    }
-  }
-
   // ── RENDER ─────────────────────────────────────────────────────────────
 
   const firstName = getFirstName(profile.full_name)
@@ -220,7 +249,7 @@ export default function AttendClient({ profile }: Props) {
             </p>
             <h1 className="text-base font-semibold text-gray-900">{profile.full_name}</h1>
           </div>
-          <StatusBadge openRecord={openRecord} onLeave={!!todayLeave} />
+          <StatusBadge openRecord={openRecord} todayLeave={todayLeave} />
         </div>
       </div>
 
@@ -332,20 +361,68 @@ export default function AttendClient({ profile }: Props) {
               </div>
             </Modal>
 
-            {/* Leave toggle */}
+            {/* Leave — shows type selector modal */}
             {!openRecord && (
               <button
-                onClick={toggleLeave}
-                className={`flex items-center gap-2 px-4 py-3 rounded-xl border text-sm font-medium transition-colors ${
+                onClick={() => setLeaveModalOpen(true)}
+                className={cn(
+                  'flex items-center gap-2 px-4 py-3 rounded-xl border text-sm font-medium transition-colors',
                   todayLeave
                     ? 'border-amber-300 bg-amber-50 text-amber-700'
                     : 'border-gray-200 bg-white text-gray-600 hover:border-gray-300'
-                }`}
+                )}
               >
                 <Calendar className="h-4 w-4" />
-                {todayLeave ? 'On Leave Today — Cancel' : 'Mark Today as Leave'}
+                {todayLeave
+                  ? `On Leave — ${LEAVE_TYPE_LABELS[todayLeave.leave_type]}`
+                  : 'Mark Today as Leave'
+                }
               </button>
             )}
+
+            {/* Leave type modal */}
+            <Modal
+              open={leaveModalOpen}
+              onClose={() => { if (!leaveLoading) setLeaveModalOpen(false) }}
+              title={todayLeave ? 'Change Leave Type' : 'Mark Leave'}
+            >
+              <div className="flex flex-col gap-3">
+                {todayLeave && (
+                  <div className="bg-amber-50 border border-amber-200 rounded-xl px-4 py-2.5 text-sm text-amber-700">
+                    Currently: <strong>{LEAVE_TYPE_LABELS[todayLeave.leave_type]}</strong>
+                  </div>
+                )}
+
+                {(['full_day', 'first_half', 'second_half'] as LeaveType[]).map(type => (
+                  <button
+                    key={type}
+                    onClick={() => handleMarkLeave(type)}
+                    disabled={leaveLoading}
+                    className={cn(
+                      'w-full text-left px-4 py-3.5 rounded-xl border text-sm font-medium transition-colors disabled:opacity-50',
+                      todayLeave?.leave_type === type
+                        ? 'border-amber-400 bg-amber-100 text-amber-800'
+                        : 'border-gray-200 bg-white text-gray-700 hover:border-amber-300 hover:bg-amber-50'
+                    )}
+                  >
+                    {LEAVE_TYPE_LABELS[type]}
+                    <span className="ml-2 text-xs font-normal text-gray-400">
+                      {LEAVE_TYPE_SUBLABELS[type]}
+                    </span>
+                  </button>
+                ))}
+
+                {todayLeave && (
+                  <button
+                    onClick={handleCancelLeave}
+                    disabled={leaveLoading}
+                    className="w-full mt-1 px-4 py-2.5 rounded-xl border border-red-200 text-sm font-medium text-red-600 hover:bg-red-50 transition-colors disabled:opacity-50"
+                  >
+                    Cancel Leave
+                  </button>
+                )}
+              </div>
+            </Modal>
 
             {/* Today's log */}
             {todayRecords.length > 0 && (
@@ -394,10 +471,19 @@ function CheckInSummary({ mode }: { mode: CheckInMode }) {
   )
 }
 
-function StatusBadge({ openRecord, onLeave }: { openRecord: unknown; onLeave: boolean }) {
+function StatusBadge({
+  openRecord,
+  todayLeave,
+}: {
+  openRecord: unknown
+  todayLeave: { leave_type: LeaveType } | null
+}) {
   if (openRecord) return <Badge variant="success" className="text-xs">Checked In</Badge>
-  if (onLeave)    return <Badge variant="warning" className="text-xs">On Leave</Badge>
-  return                 <Badge className="text-xs">Free</Badge>
+  if (todayLeave) {
+    const label = LEAVE_TYPE_LABELS[todayLeave.leave_type] ?? 'On Leave'
+    return <Badge variant="warning" className="text-xs">{label}</Badge>
+  }
+  return <Badge className="text-xs">Free</Badge>
 }
 
 function AttendanceLogCard({ record }: { record: AttendanceRecord }) {
