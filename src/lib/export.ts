@@ -30,6 +30,17 @@ export interface AttendanceExportRow {
   regularized: boolean
 }
 
+export interface AttendanceRegisterRow {
+  date:         string  // ISO 'YYYY-MM-DD'
+  article_name: string
+  status:       'Present' | 'Full Day Leave' | 'First Half Leave' | 'Second Half Leave' | 'AWOL'
+  check_in:     string  // formatted time or ''
+  check_out:    string  // formatted time or ''
+  duration:     string  // e.g. '3h 45m' or ''
+  client:       string
+  work_type:    string
+}
+
 export interface AssignmentExportRow {
   client_name: string
   work_type_label: string
@@ -219,6 +230,73 @@ export async function buildAssignmentActivityExcel(rows: AssignmentExportRow[]):
       last_attendance:   fmtDate(row.last_attendance),
       assignment_status: row.assignment_status.charAt(0).toUpperCase() + row.assignment_status.slice(1),
     })
+  }
+
+  ws.autoFilter = { from: 'A1', to: 'H1' }
+
+  const buffer = await wb.xlsx.writeBuffer()
+  return Buffer.from(buffer)
+}
+
+const REGISTER_STATUS_COLORS: Record<string, string> = {
+  'Present':           'FF15803D',
+  'Full Day Leave':    'FFB45309',
+  'First Half Leave':  'FFD97706',
+  'Second Half Leave': 'FFD97706',
+  'AWOL':              'FFB91C1C',
+}
+
+export async function buildAttendanceRegisterExcel(
+  rows: AttendanceRegisterRow[],
+  startDate: string,
+  endDate: string,
+): Promise<Buffer> {
+  const wb = new ExcelJS.Workbook()
+  wb.creator = 'CA Attendance Manager'
+  wb.created = new Date()
+
+  const ws = wb.addWorksheet('Attendance Register', {
+    views: [{ state: 'frozen', ySplit: 1 }],
+  })
+
+  ws.columns = [
+    { header: 'Date',          key: 'date',          width: 16 },
+    { header: 'Article Name',  key: 'article_name',  width: 24 },
+    { header: 'Status',        key: 'status',        width: 18 },
+    { header: 'Check In',      key: 'check_in',      width: 12 },
+    { header: 'Check Out',     key: 'check_out',     width: 12 },
+    { header: 'Duration',      key: 'duration',      width: 12 },
+    { header: 'Client',        key: 'client',        width: 32 },
+    { header: 'Work Type',     key: 'work_type',     width: 26 },
+  ]
+
+  applyHeaderStyle(ws.getRow(1))
+
+  ws.headerFooter.oddHeader = `&C&B Attendance Register — ${startDate} to ${endDate}`
+
+  // Safe date format: parse components to avoid UTC/local timezone flip
+  const fmtDate = (iso: string): string => {
+    const [y, m, d] = iso.split('-').map(Number)
+    return new Date(Date.UTC(y, m - 1, d)).toLocaleDateString('en-IN', {
+      day: '2-digit', month: 'short', year: 'numeric',
+    })
+  }
+
+  for (const row of rows) {
+    const r = ws.addRow({
+      date:         fmtDate(row.date),
+      article_name: row.article_name,
+      status:       row.status,
+      check_in:     row.check_in,
+      check_out:    row.check_out,
+      duration:     row.duration,
+      client:       row.client,
+      work_type:    row.work_type,
+    })
+    const color = REGISTER_STATUS_COLORS[row.status]
+    if (color) {
+      r.getCell('status').font = { bold: true, color: { argb: color } }
+    }
   }
 
   ws.autoFilter = { from: 'A1', to: 'H1' }
