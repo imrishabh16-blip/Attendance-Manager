@@ -16,12 +16,18 @@ export default async function ReportsPage() {
   if (!profile || profile.status !== 'active') redirect(profile?.status === 'deactivated' ? '/deactivated' : '/awaiting')
   if (profile.role === 'article') redirect('/attend')
 
-  const { data: articles } = await supabase
-    .from('profiles')
-    .select('id, full_name')
-    .eq('role', 'article')
-    .eq('status', 'active')
-    .order('full_name')
+  const [{ data: articles }, { data: assignments }] = await Promise.all([
+    supabase
+      .from('profiles')
+      .select('id, full_name')
+      .eq('role', 'article')
+      .eq('status', 'active')
+      .order('full_name'),
+    supabase
+      .from('assignments')
+      .select('id, client_name, work_type, status')
+      .order('client_name'),
+  ])
 
-  return <ReportsClient articles={articles ?? []} />
+  return <ReportsClient articles={articles ?? []} assignments={assignments ?? []} />
 }

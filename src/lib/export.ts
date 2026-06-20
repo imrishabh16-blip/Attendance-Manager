@@ -32,15 +32,18 @@ export interface AttendanceExportRow {
 }
 
 
-export interface AssignmentExportRow {
-  client_name: string
-  work_type_label: string
-  total_days: number
-  total_hours: number
-  articles_involved: number
-  first_attendance: string | null
-  last_attendance: string | null
-  assignment_status: string
+export interface SessionReportRow {
+  assignment_label: string
+  client_name:      string
+  work_type:        string
+  session_number:   string
+  articles_count:   number
+  article_names:    string
+  attendance_days:  number
+  total_hours:      number
+  status:           'Active' | 'Completed'
+  first_date:       string
+  last_date:        string
 }
 
 const HEADER_FILL: ExcelJS.Fill = {
@@ -191,45 +194,57 @@ export async function buildStatusReportExcel(rows: StatusReportRow[], date: stri
   return Buffer.from(buffer)
 }
 
-export async function buildAssignmentActivityExcel(rows: AssignmentExportRow[]): Promise<Buffer> {
+const SESSION_STATUS_COLORS: Record<string, string> = {
+  'Active':    'FF15803D',
+  'Completed': 'FF1D4ED8',
+}
+
+export async function buildSessionReportExcel(rows: SessionReportRow[]): Promise<Buffer> {
   const wb = new ExcelJS.Workbook()
   wb.creator = 'CA Attendance Manager'
   wb.created = new Date()
 
-  const ws = wb.addWorksheet('Assignment Activity', {
+  const ws = wb.addWorksheet('Session Report', {
     views: [{ state: 'frozen', ySplit: 1 }],
   })
 
   ws.columns = [
-    { header: 'Client Name',        key: 'client_name',       width: 28 },
-    { header: 'Work Type',          key: 'work_type_label',   width: 26 },
-    { header: 'Attendance Days',    key: 'total_days',        width: 16 },
-    { header: 'Total Hours',        key: 'total_hours',       width: 14 },
-    { header: 'Articles Involved',  key: 'articles_involved', width: 18 },
-    { header: 'First Attendance',   key: 'first_attendance',  width: 18 },
-    { header: 'Last Attendance',    key: 'last_attendance',   width: 18 },
-    { header: 'Status',             key: 'assignment_status', width: 12 },
+    { header: 'Assignment',       key: 'assignment_label', width: 34 },
+    { header: 'Client Name',      key: 'client_name',      width: 26 },
+    { header: 'Work Type',        key: 'work_type',        width: 24 },
+    { header: 'Session',          key: 'session_number',   width: 10 },
+    { header: 'Articles',         key: 'articles_count',   width: 12 },
+    { header: 'Article Names',    key: 'article_names',    width: 36 },
+    { header: 'Days',             key: 'attendance_days',  width: 10 },
+    { header: 'Hours',            key: 'total_hours',      width: 10 },
+    { header: 'Status',           key: 'status',           width: 12 },
+    { header: 'First Attendance', key: 'first_date',       width: 16 },
+    { header: 'Last Attendance',  key: 'last_date',        width: 16 },
   ]
 
   applyHeaderStyle(ws.getRow(1))
 
-  const fmtDate = (iso: string | null) =>
-    iso ? new Date(iso).toLocaleDateString('en-IN') : ''
+  const fmtDate = (iso: string) => new Date(iso).toLocaleDateString('en-IN')
 
   for (const row of rows) {
-    ws.addRow({
-      client_name:       row.client_name,
-      work_type_label:   row.work_type_label,
-      total_days:        row.total_days,
-      total_hours:       row.total_hours,
-      articles_involved: row.articles_involved,
-      first_attendance:  fmtDate(row.first_attendance),
-      last_attendance:   fmtDate(row.last_attendance),
-      assignment_status: row.assignment_status.charAt(0).toUpperCase() + row.assignment_status.slice(1),
+    const r = ws.addRow({
+      assignment_label: row.assignment_label,
+      client_name:      row.client_name,
+      work_type:        row.work_type,
+      session_number:   row.session_number,
+      articles_count:   row.articles_count,
+      article_names:    row.article_names,
+      attendance_days:  row.attendance_days,
+      total_hours:      row.total_hours,
+      status:           row.status,
+      first_date:       fmtDate(row.first_date),
+      last_date:        fmtDate(row.last_date),
     })
+    const color = SESSION_STATUS_COLORS[row.status]
+    if (color) r.getCell('status').font = { bold: true, color: { argb: color } }
   }
 
-  ws.autoFilter = { from: 'A1', to: 'H1' }
+  ws.autoFilter = { from: 'A1', to: 'K1' }
 
   const buffer = await wb.xlsx.writeBuffer()
   return Buffer.from(buffer)
