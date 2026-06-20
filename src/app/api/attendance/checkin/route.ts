@@ -131,10 +131,24 @@ export async function POST(req: NextRequest) {
         .select('id')
         .single()
 
-      if (createError || !created) {
+      if (!createError && created) {
+        resolvedAssignmentId = created.id
+      } else if (createError?.code === '23505') {
+        // Race: another concurrent request already created this assignment — look it up
+        const { data: raceWinner } = await admin
+          .from('assignments')
+          .select('id')
+          .eq('client_name', client_name as string)
+          .eq('work_type', work_type as WorkType)
+          .eq('status', 'active')
+          .maybeSingle()
+        if (!raceWinner) {
+          return NextResponse.json({ error: 'Failed to create assignment record' }, { status: 500 })
+        }
+        resolvedAssignmentId = raceWinner.id
+      } else {
         return NextResponse.json({ error: 'Failed to create assignment record' }, { status: 500 })
       }
-      resolvedAssignmentId = created.id
     }
   }
 

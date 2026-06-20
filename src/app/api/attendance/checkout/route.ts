@@ -54,9 +54,11 @@ export async function POST(req: NextRequest) {
       note:            note ?? undefined,
     })
     .eq('id', record_id)
+    .is('checked_out_at', null)
     .select()
-    .single()
+    .maybeSingle()
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+  if (!data) return NextResponse.json({ error: 'Already checked out' }, { status: 409 })
   return NextResponse.json({ record: data })
 }

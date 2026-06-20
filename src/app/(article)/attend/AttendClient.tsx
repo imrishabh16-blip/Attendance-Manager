@@ -49,33 +49,40 @@ function getGreeting(): { text: string; sub: string } {
 }
 
 export default function AttendClient({ profile }: Props) {
-  const { state: gpsState, acquire }                        = useGPS()
-  const { todayRecords, openRecord, todayLeave, loading, refresh } = useAttendanceSession(profile.id)
+  const { acquire }                                                       = useGPS()
+  const { todayRecords, openRecord, todayLeave, loading, refresh }       = useAttendanceSession(profile.id)
 
-  const [step, setStep]             = useState<Step>('idle')
-  const [note, setNote]             = useState('')
-  const [othersName, setOthersName] = useState('')
+  const [step, setStep]               = useState<Step>('idle')
+  const [note, setNote]               = useState('')
+  const [othersName, setOthersName]   = useState('')
   const [checkInMode, setCheckInMode] = useState<CheckInMode | null>(null)
-  const [gpsCoords, setGpsCoords]   = useState<{ latitude: number; longitude: number } | null>(null)
+  const [gpsCoords, setGpsCoords]     = useState<{ latitude: number; longitude: number } | null>(null)
+  const [leaveLoading, setLeaveLoading] = useState(false)
+
+  // True whenever any operation is in flight
+  const busy = step !== 'idle' || leaveLoading
 
   async function toggleLeave() {
     const today = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' })
-    if (todayLeave) {
+    setLeaveLoading(true)
+    try {
       const res = await fetch('/api/leave', {
-        method:  'DELETE',
+        method:  todayLeave ? 'DELETE' : 'POST',
         headers: { 'Content-Type': 'application/json' },
         body:    JSON.stringify({ leave_date: today }),
       })
-      if (res.ok) { toast.success('Leave cancelled'); refresh() }
-      else        { toast.error('Could not cancel leave') }
-    } else {
-      const res = await fetch('/api/leave', {
-        method:  'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body:    JSON.stringify({ leave_date: today }),
-      })
-      if (res.ok) { toast.success('Leave marked'); refresh() }
-      else        { toast.error('Could not mark leave') }
+      let json: Record<string, unknown> = {}
+      try { json = await res.json() } catch { /* non-JSON body */ }
+      if (!res.ok) {
+        toast.error(typeof json.error === 'string' ? json.error : 'Could not update leave status')
+        return
+      }
+      toast.success(todayLeave ? 'Leave cancelled' : 'Leave marked')
+      refresh()
+    } catch {
+      toast.error('Network error. Check your connection and try again.')
+    } finally {
+      setLeaveLoading(false)
     }
   }
 
@@ -84,17 +91,13 @@ export default function AttendClient({ profile }: Props) {
   async function startCheckIn() {
     setCheckInMode(null)
     setStep('gps_loading')
-    const coords = await acquire()
-    if (!coords) {
+    const result = await acquire()
+    if (!result.success) {
       setStep('idle')
-      toast.error(
-        gpsState.status === 'error'
-          ? (gpsState as { message: string }).message
-          : 'GPS unavailable'
-      )
+      toast.error(result.errorMessage)
       return
     }
-    setGpsCoords(coords)
+    setGpsCoords(result.coords)
     setStep('select')
   }
 
@@ -144,20 +147,28 @@ export default function AttendClient({ profile }: Props) {
       }
     }
 
-    const res = await fetch('/api/attendance/checkin', {
-      method:  'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body:    JSON.stringify(body),
-    })
-    const json = await res.json()
-    if (!res.ok) { toast.error(json.error); setStep('idle'); return }
-
-    toast.success('Checked in successfully')
-    setStep('idle')
-    setNote('')
-    setOthersName('')
-    setCheckInMode(null)
-    await refresh()
+    try {
+      const res = await fetch('/api/attendance/checkin', {
+        method:  'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body:    JSON.stringify(body),
+      })
+      let json: Record<string, unknown> = {}
+      try { json = await res.json() } catch { /* non-JSON body */ }
+      if (!res.ok) {
+        toast.error(typeof json.error === 'string' ? json.error : 'Check-in failed. Please try again.')
+        return
+      }
+      toast.success('Checked in successfully')
+      setNote('')
+      setOthersName('')
+      setCheckInMode(null)
+      await refresh()
+    } catch {
+      toast.error('Network error. Check your connection and try again.')
+    } finally {
+      setStep('idle')
+    }
   }
 
   // ── CHECK-OUT FLOW ─────────────────────────────────────────────────────
@@ -165,13 +176,13 @@ export default function AttendClient({ profile }: Props) {
   async function handleCheckOut() {
     if (!openRecord) return
     setStep('gps_loading')
-    const coords = await acquire()
-    if (!coords) {
+    const result = await acquire()
+    if (!result.success) {
       setStep('idle')
-      toast.error('GPS required for checkout')
+      toast.error(result.errorMessage)
       return
     }
-    setGpsCoords(coords)
+    setGpsCoords(result.coords)
     setStep('note_input')
   }
 
@@ -179,23 +190,31 @@ export default function AttendClient({ profile }: Props) {
     if (!gpsCoords || !openRecord) return
     setStep('submitting')
 
-    const res = await fetch('/api/attendance/checkout', {
-      method:  'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body:    JSON.stringify({
-        record_id: openRecord.id,
-        latitude:  gpsCoords.latitude,
-        longitude: gpsCoords.longitude,
-        note:      note || undefined,
-      }),
-    })
-    const json = await res.json()
-    if (!res.ok) { toast.error(json.error); setStep('idle'); return }
-
-    toast.success('Checked out')
-    setStep('idle')
-    setNote('')
-    await refresh()
+    try {
+      const res = await fetch('/api/attendance/checkout', {
+        method:  'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body:    JSON.stringify({
+          record_id: openRecord.id,
+          latitude:  gpsCoords.latitude,
+          longitude: gpsCoords.longitude,
+          note:      note || undefined,
+        }),
+      })
+      let json: Record<string, unknown> = {}
+      try { json = await res.json() } catch { /* non-JSON body */ }
+      if (!res.ok) {
+        toast.error(typeof json.error === 'string' ? json.error : 'Check-out failed. Please try again.')
+        return
+      }
+      toast.success('Checked out')
+      setNote('')
+      await refresh()
+    } catch {
+      toast.error('Network error. Check your connection and try again.')
+    } finally {
+      setStep('idle')
+    }
   }
 
   // ── RENDER ─────────────────────────────────────────────────────────────
@@ -237,11 +256,11 @@ export default function AttendClient({ profile }: Props) {
             {/* Primary action */}
             {step === 'idle' && (
               openRecord ? (
-                <Button onClick={handleCheckOut} size="lg" variant="danger" className="w-full">
+                <Button onClick={handleCheckOut} size="lg" variant="danger" className="w-full" disabled={leaveLoading}>
                   <LogOut className="h-5 w-5" /> Check Out
                 </Button>
               ) : (
-                <Button onClick={startCheckIn} size="lg" className="w-full" disabled={!!todayLeave}>
+                <Button onClick={startCheckIn} size="lg" className="w-full" disabled={!!todayLeave || leaveLoading}>
                   <LogIn className="h-5 w-5" /> Check In
                 </Button>
               )
@@ -333,11 +352,13 @@ export default function AttendClient({ profile }: Props) {
             {!openRecord && (
               <button
                 onClick={toggleLeave}
+                disabled={busy}
                 className={cn(
                   'flex items-center gap-2 px-4 py-3 rounded-xl border text-sm font-medium transition-colors',
                   todayLeave
                     ? 'border-amber-300 bg-amber-50 text-amber-700'
-                    : 'border-gray-200 bg-white text-gray-600 hover:border-gray-300'
+                    : 'border-gray-200 bg-white text-gray-600 hover:border-gray-300',
+                  busy && 'opacity-50 cursor-not-allowed'
                 )}
               >
                 <Calendar className="h-4 w-4" />
