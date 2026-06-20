@@ -114,7 +114,7 @@ Migrations must be run **in order**. Open your Supabase project → **SQL Editor
 
 ## 6. Create the First Admin
 
-After migrations are applied, you need to bootstrap the first admin user. There is a chicken-and-egg problem: all sign-ins start as "pending", and there is nobody to approve them yet.
+After migrations are applied, you need to promote the first admin user. There is a chicken-and-egg problem: all sign-ins start as "pending", and there is nobody to approve them yet.
 
 **Steps:**
 
@@ -126,13 +126,15 @@ After migrations are applied, you need to bootstrap the first admin user. There 
 6. Run this, replacing the email:
 
 ```sql
-SELECT bootstrap_first_admin('your-email@yourdomain.com');
+UPDATE public.profiles
+SET role = 'admin', status = 'active'
+WHERE email = 'your-email@yourdomain.com';
 ```
 
-7. You should see: `Success: "your-email@yourdomain.com" is now an admin. Refresh the app.`
+7. Confirm the query returns `1 row affected`. If it returns 0, the profile was not created — the sign-in did not complete successfully.
 8. Go back to the browser and refresh — you will be redirected to the dashboard
 
-**Safety:** This function refuses to run if an admin already exists, and requires the email to have signed in at least once (so the profile row exists).
+**Note:** The `bootstrap_first_admin()` helper function was removed in migration 00019. The direct UPDATE above is equivalent and requires no helper function.
 
 ---
 
@@ -242,8 +244,8 @@ Run migrations in order (00001 first). The pg_trgm extension is set up in 00001 
 **Migrations 00007/00008 fail with "cannot change return type"**
 Run 00008 directly — it explicitly drops and recreates all affected functions before recreating them. It is safe to run even if 00007 previously failed.
 
-**"No profile found" when running bootstrap_first_admin**
-You must sign in with Google at least once before running the bootstrap. The "Awaiting Access" screen appearing confirms the profile was created.
+**UPDATE returns 0 rows when promoting the first admin**
+You must sign in with Google at least once before running the UPDATE. The "Awaiting Access" screen appearing confirms the profile row was created.
 
 **"You have an unclosed check-in" on a prior date**
 An admin can regularize the unclosed attendance record by setting `checked_out_at` to an appropriate timestamp from the Supabase Table Editor, then the article can check in normally.
