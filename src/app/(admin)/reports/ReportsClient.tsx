@@ -18,7 +18,7 @@ export default function ReportsClient({ articles }: Props) {
   const [startDate, setStart]      = useState(monthStart)
   const [endDate, setEnd]          = useState(today)
   const [articleId, setArticleId]  = useState('')
-  const [downloading, setDl]       = useState<'attendance' | 'assignments' | 'register' | null>(null)
+  const [downloading, setDl]       = useState<'attendance' | 'assignments' | null>(null)
 
   async function downloadAttendance() {
     if (!startDate || !endDate) { toast.error('Select date range'); return }
@@ -38,30 +38,6 @@ export default function ReportsClient({ articles }: Props) {
     URL.revokeObjectURL(url)
     setDl(null)
     toast.success('Attendance report downloaded')
-  }
-
-  async function downloadRegister() {
-    if (!startDate || !endDate) { toast.error('Select date range'); return }
-    setDl('register')
-    const params = new URLSearchParams({ start_date: startDate, end_date: endDate })
-
-    const res = await fetch(`/api/export/attendance-register?${params}`)
-    if (!res.ok) {
-      const json = await res.json().catch(() => ({}))
-      toast.error(json.error ?? 'Export failed')
-      setDl(null)
-      return
-    }
-
-    const blob = await res.blob()
-    const url  = URL.createObjectURL(blob)
-    const a    = document.createElement('a')
-    a.href     = url
-    a.download = `attendance_register_${startDate}_to_${endDate}.xlsx`
-    a.click()
-    URL.revokeObjectURL(url)
-    setDl(null)
-    toast.success('Attendance register downloaded')
   }
 
   async function downloadAssignments() {
@@ -144,55 +120,7 @@ export default function ReportsClient({ articles }: Props) {
               </Button>
 
               <p className="text-xs text-gray-400">
-                Includes: Article, Assignment, Check-in/out times, GPS coords, Google Maps links, Hours, Notes
-              </p>
-            </div>
-          </CardBody>
-        </Card>
-
-        {/* Attendance Register */}
-        <Card>
-          <CardHeader>
-            <div className="flex items-center gap-2">
-              <FileSpreadsheet className="h-4 w-4 text-amber-600" />
-              <h2 className="text-sm font-semibold text-gray-900">Attendance Register</h2>
-            </div>
-          </CardHeader>
-          <CardBody>
-            <div className="flex flex-col gap-4">
-              <div className="grid grid-cols-2 gap-3">
-                <div className="flex flex-col gap-1">
-                  <label className="text-xs font-medium text-gray-500">From</label>
-                  <input
-                    type="date"
-                    value={startDate}
-                    onChange={e => setStart(e.target.value)}
-                    className="px-3 py-2.5 rounded-xl border border-gray-300 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"
-                  />
-                </div>
-                <div className="flex flex-col gap-1">
-                  <label className="text-xs font-medium text-gray-500">To</label>
-                  <input
-                    type="date"
-                    value={endDate}
-                    onChange={e => setEnd(e.target.value)}
-                    className="px-3 py-2.5 rounded-xl border border-gray-300 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"
-                  />
-                </div>
-              </div>
-
-              <Button
-                onClick={downloadRegister}
-                loading={downloading === 'register'}
-                variant="secondary"
-                className="w-full sm:w-auto"
-              >
-                <Download className="h-4 w-4" />
-                Export Attendance Register (.xlsx)
-              </Button>
-
-              <p className="text-xs text-gray-400">
-                One row per article per date. Statuses: Present, Full Day Leave, First Half Leave, Second Half Leave, AWOL. Max 365-day range.
+                Includes: Article, Assignment, Check-in/out times, Google Maps links, Hours, Status, Notes
               </p>
             </div>
           </CardBody>

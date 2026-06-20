@@ -11,13 +11,6 @@ import { RefreshCw, UserCheck, UserX, Users, Flag, ChevronDown, Search, Download
 import toast from 'react-hot-toast'
 import { cn, formatTime, workTypeBadgeColor } from '@/lib/utils'
 import type { TodaySessionItem } from '@/app/api/dashboard/today-sessions/route'
-import type { LeaveType } from '@/types/app'
-
-const LEAVE_TYPE_LABELS: Record<LeaveType, string> = {
-  full_day:    'Full Day',
-  first_half:  'First Half',
-  second_half: 'Second Half',
-}
 
 interface Props {
   profile: { id: string; full_name: string; role: string }
@@ -396,11 +389,8 @@ export default function DashboardClient({ profile: _ }: Props) {
         ) : (
           <ul className="divide-y divide-brand-100">
             {filteredOnLeave.map(r => (
-              <li key={r.article_id} className="py-3 flex items-center justify-between gap-3 text-sm">
-                <span className="font-medium text-gray-800">{r.article_name}</span>
-                <span className="text-xs font-medium text-amber-600 shrink-0">
-                  {LEAVE_TYPE_LABELS[r.leave_type] ?? r.leave_type}
-                </span>
+              <li key={r.article_id} className="py-3 text-sm font-medium text-gray-800">
+                {r.article_name}
               </li>
             ))}
           </ul>

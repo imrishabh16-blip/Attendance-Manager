@@ -28,18 +28,9 @@ export interface AttendanceExportRow {
   attendance_type_label: string
   others_client_name: string | null
   regularized: boolean
+  status: string
 }
 
-export interface AttendanceRegisterRow {
-  date:         string  // ISO 'YYYY-MM-DD'
-  article_name: string
-  status:       'Present' | 'Full Day Leave' | 'First Half Leave' | 'Second Half Leave' | 'AWOL'
-  check_in:     string  // formatted time or ''
-  check_out:    string  // formatted time or ''
-  duration:     string  // e.g. '3h 45m' or ''
-  client:       string
-  work_type:    string
-}
 
 export interface AssignmentExportRow {
   client_name: string
@@ -65,6 +56,14 @@ function applyHeaderStyle(row: ExcelJS.Row) {
   row.height = 22
 }
 
+const ATTENDANCE_STATUS_COLORS: Record<string, string> = {
+  'Completed':   'FF15803D',
+  'Half Day':    'FFD97706',
+  'Unallocated': 'FF6B7280',
+  'On Leave':    'FFB45309',
+  'AWOL':        'FFB91C1C',
+}
+
 export async function buildAttendanceExcel(rows: AttendanceExportRow[]): Promise<Buffer> {
   const wb = new ExcelJS.Workbook()
   wb.creator = 'CA Attendance Manager'
@@ -75,23 +74,20 @@ export async function buildAttendanceExcel(rows: AttendanceExportRow[]): Promise
   })
 
   ws.columns = [
-    { header: 'Article Name',        key: 'article_name',       width: 22 },
-    { header: 'Assignment',           key: 'assignment_label',   width: 36 },
-    { header: 'Work Type',            key: 'work_type_label',    width: 26 },
-    { header: 'Date',                 key: 'attendance_date',    width: 14 },
-    { header: 'Check-In',             key: 'checked_in_at',      width: 20 },
-    { header: 'Check-Out',            key: 'checked_out_at',     width: 20 },
-    { header: 'Hours',                key: 'duration_hours',     width: 10 },
-    { header: 'Check-In Lat',         key: 'check_in_lat',       width: 14 },
-    { header: 'Check-In Lng',         key: 'check_in_lng',       width: 14 },
-    { header: 'Check-Out Lat',        key: 'check_out_lat',      width: 14 },
-    { header: 'Check-Out Lng',        key: 'check_out_lng',      width: 14 },
-    { header: 'Check-In Map',         key: 'maps_link_in',       width: 18 },
-    { header: 'Check-Out Map',        key: 'maps_link_out',      width: 18 },
-    { header: 'Notes',                key: 'note',               width: 32 },
-    { header: 'Type',                 key: 'attendance_type',    width: 12 },
-    { header: 'Others Client',        key: 'others_client_name', width: 22 },
-    { header: 'Regularized',          key: 'regularized',        width: 12 },
+    { header: 'Article Name',   key: 'article_name',       width: 22 },
+    { header: 'Assignment',     key: 'assignment_label',   width: 36 },
+    { header: 'Work Type',      key: 'work_type_label',    width: 26 },
+    { header: 'Date',           key: 'attendance_date',    width: 14 },
+    { header: 'Check-In',       key: 'checked_in_at',      width: 20 },
+    { header: 'Check-Out',      key: 'checked_out_at',     width: 20 },
+    { header: 'Hours',          key: 'duration_hours',     width: 10 },
+    { header: 'Status',         key: 'status',             width: 14 },
+    { header: 'Check-In Map',   key: 'maps_link_in',       width: 18 },
+    { header: 'Check-Out Map',  key: 'maps_link_out',      width: 18 },
+    { header: 'Notes',          key: 'note',               width: 32 },
+    { header: 'Type',           key: 'attendance_type',    width: 12 },
+    { header: 'Others Client',  key: 'others_client_name', width: 22 },
+    { header: 'Regularized',    key: 'regularized',        width: 12 },
   ]
 
   applyHeaderStyle(ws.getRow(1))
@@ -110,10 +106,7 @@ export async function buildAttendanceExcel(rows: AttendanceExportRow[]): Promise
       checked_in_at:       fmtTime(row.checked_in_at),
       checked_out_at:      fmtTime(row.checked_out_at),
       duration_hours:      row.duration_hours ?? '',
-      check_in_lat:        row.check_in_lat ?? '',
-      check_in_lng:        row.check_in_lng ?? '',
-      check_out_lat:       row.check_out_lat ?? '',
-      check_out_lng:       row.check_out_lng ?? '',
+      status:              row.status,
       maps_link_in:        '',
       maps_link_out:       '',
       note:                row.note ?? '',
@@ -122,6 +115,10 @@ export async function buildAttendanceExcel(rows: AttendanceExportRow[]): Promise
       regularized:         row.regularized ? 'Yes' : 'No',
     })
 
+    if (row.status) {
+      const color = ATTENDANCE_STATUS_COLORS[row.status]
+      if (color) r.getCell('status').font = { bold: true, color: { argb: color } }
+    }
     if (row.maps_link_in) {
       r.getCell('maps_link_in').value = { text: 'View Map', hyperlink: row.maps_link_in }
       r.getCell('maps_link_in').font = { color: { argb: 'FF0563C1' }, underline: true }
@@ -135,7 +132,7 @@ export async function buildAttendanceExcel(rows: AttendanceExportRow[]): Promise
     }
   }
 
-  ws.autoFilter = { from: 'A1', to: 'Q1' }
+  ws.autoFilter = { from: 'A1', to: 'N1' }
 
   const buffer = await wb.xlsx.writeBuffer()
   return Buffer.from(buffer)
@@ -238,69 +235,3 @@ export async function buildAssignmentActivityExcel(rows: AssignmentExportRow[]):
   return Buffer.from(buffer)
 }
 
-const REGISTER_STATUS_COLORS: Record<string, string> = {
-  'Present':           'FF15803D',
-  'Full Day Leave':    'FFB45309',
-  'First Half Leave':  'FFD97706',
-  'Second Half Leave': 'FFD97706',
-  'AWOL':              'FFB91C1C',
-}
-
-export async function buildAttendanceRegisterExcel(
-  rows: AttendanceRegisterRow[],
-  startDate: string,
-  endDate: string,
-): Promise<Buffer> {
-  const wb = new ExcelJS.Workbook()
-  wb.creator = 'CA Attendance Manager'
-  wb.created = new Date()
-
-  const ws = wb.addWorksheet('Attendance Register', {
-    views: [{ state: 'frozen', ySplit: 1 }],
-  })
-
-  ws.columns = [
-    { header: 'Date',          key: 'date',          width: 16 },
-    { header: 'Article Name',  key: 'article_name',  width: 24 },
-    { header: 'Status',        key: 'status',        width: 18 },
-    { header: 'Check In',      key: 'check_in',      width: 12 },
-    { header: 'Check Out',     key: 'check_out',     width: 12 },
-    { header: 'Duration',      key: 'duration',      width: 12 },
-    { header: 'Client',        key: 'client',        width: 32 },
-    { header: 'Work Type',     key: 'work_type',     width: 26 },
-  ]
-
-  applyHeaderStyle(ws.getRow(1))
-
-  ws.headerFooter.oddHeader = `&C&B Attendance Register — ${startDate} to ${endDate}`
-
-  // Safe date format: parse components to avoid UTC/local timezone flip
-  const fmtDate = (iso: string): string => {
-    const [y, m, d] = iso.split('-').map(Number)
-    return new Date(Date.UTC(y, m - 1, d)).toLocaleDateString('en-IN', {
-      day: '2-digit', month: 'short', year: 'numeric',
-    })
-  }
-
-  for (const row of rows) {
-    const r = ws.addRow({
-      date:         fmtDate(row.date),
-      article_name: row.article_name,
-      status:       row.status,
-      check_in:     row.check_in,
-      check_out:    row.check_out,
-      duration:     row.duration,
-      client:       row.client,
-      work_type:    row.work_type,
-    })
-    const color = REGISTER_STATUS_COLORS[row.status]
-    if (color) {
-      r.getCell('status').font = { bold: true, color: { argb: color } }
-    }
-  }
-
-  ws.autoFilter = { from: 'A1', to: 'H1' }
-
-  const buffer = await wb.xlsx.writeBuffer()
-  return Buffer.from(buffer)
-}

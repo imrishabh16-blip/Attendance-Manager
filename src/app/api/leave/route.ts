@@ -2,8 +2,6 @@ import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { NextRequest, NextResponse } from 'next/server'
 
-const VALID_LEAVE_TYPES = ['full_day', 'first_half', 'second_half'] as const
-
 export async function POST(req: NextRequest) {
   const supabase = await createClient()
   const { data: { session } } = await supabase.auth.getSession()
@@ -19,11 +17,8 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Account not active' }, { status: 403 })
   }
 
-  const { leave_date, note, leave_type = 'full_day' } = await req.json()
+  const { leave_date, note } = await req.json()
   if (!leave_date) return NextResponse.json({ error: 'leave_date required' }, { status: 400 })
-  if (!VALID_LEAVE_TYPES.includes(leave_type)) {
-    return NextResponse.json({ error: 'Invalid leave_type' }, { status: 400 })
-  }
 
   // Block leave marking if attendance already exists for that date
   const { data: existingAttendance } = await supabase
@@ -46,7 +41,7 @@ export async function POST(req: NextRequest) {
   const { data, error } = await admin
     .from('leave_records')
     .upsert(
-      { article_id: session.user.id, leave_date, leave_type, note: note ?? null },
+      { article_id: session.user.id, leave_date, note: note ?? null },
       { onConflict: 'article_id,leave_date', ignoreDuplicates: false }
     )
     .select()
