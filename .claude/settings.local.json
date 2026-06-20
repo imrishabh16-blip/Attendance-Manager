@@ -19,7 +19,8 @@
       "Bash(Get-ChildItem -Path \"C:\\\\Users\\\\imris\\\\Desktop\\\\AI Shenanigans\\\\Attendance Manager\" -Recurse -Directory)",
       "Bash(Select-Object -ExpandProperty FullName)",
       "Bash(Sort-Object)",
-      "PowerShell(Get-ChildItem -Path \"C:\\\\Users\\\\imris\\\\Desktop\\\\AI Shenanigans\\\\Attendance Manager\" -Force | Select-Object Name, @{Name='Type';Expression={if\\($_.PSIsContainer\\){'DIR'}else{'FILE'}}} | Format-Table -AutoSize)"
+      "PowerShell(Get-ChildItem -Path \"C:\\\\Users\\\\imris\\\\Desktop\\\\AI Shenanigans\\\\Attendance Manager\" -Force | Select-Object Name, @{Name='Type';Expression={if\\($_.PSIsContainer\\){'DIR'}else{'FILE'}}} | Format-Table -AutoSize)",
+      "Bash(Remove-Item \"C:\\\\Users\\\\imris\\\\Desktop\\\\AI Shenanigans\\\\Attendance Manager\\\\src\\\\components\\\\dashboard\\\\ArticleStatusGroups.tsx\")"
     ]
   }
 }
