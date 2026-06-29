@@ -22,13 +22,13 @@ export async function POST(req: NextRequest) {
   }
 
   const body = await req.json()
-  const { client_name, work_type, latitude, longitude, attendance_type, others_client_name, note } = body
+  const { client_name, work_type, latitude, longitude, attendance_type, note } = body
 
   // --- Input validation ---
   if (latitude == null || longitude == null) {
     return NextResponse.json({ error: 'GPS coordinates are required' }, { status: 400 })
   }
-  if (!attendance_type || !['regular', 'others', 'unallocated'].includes(attendance_type)) {
+  if (!attendance_type || !['regular', 'unallocated'].includes(attendance_type)) {
     return NextResponse.json({ error: 'Invalid attendance type' }, { status: 400 })
   }
   if (attendance_type === 'regular' && (!client_name || !work_type)) {
@@ -164,8 +164,6 @@ export async function POST(req: NextRequest) {
       checked_in_lng:     longitude,
       note:               note ?? null,
       attendance_type,
-      others_client_name: attendance_type === 'others' ? (others_client_name ?? null) : null,
-      flagged_for_review: attendance_type === 'others',
     })
     .select()
     .single()

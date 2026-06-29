@@ -110,23 +110,6 @@ export interface OnLeaveArticleRow {
   article_name: string
 }
 
-export interface FlaggedRecord {
-  record_id:          string
-  article_id:         string
-  article_name:       string
-  attendance_date:    string
-  checked_in_at:      string | null
-  checked_out_at:     string | null
-  attendance_type:    AttendanceType
-  others_client_name: string | null
-  assignment_id:      string | null
-  client_name:        string | null
-  work_type:          string | null
-  flagged_for_review: boolean
-  reviewed_at:        string | null
-  reviewed_by_name:   string | null
-}
-
 // WORK_TYPES kept only for badge colour mapping in workTypeBadgeColor().
 // The UI dropdown now fetches from the work_types DB table instead.
 export const WORK_TYPES: string[] = [

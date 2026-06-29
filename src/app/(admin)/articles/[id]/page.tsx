@@ -26,7 +26,7 @@ const fmtDateIST = (iso: string) =>
   })
 
 function typeBadge(type: AttendanceType) {
-  if (type === 'others')      return <Badge variant="warning" className="text-xs">Flagged</Badge>
+  if (type === 'others')      return <Badge variant="warning" className="text-xs">Others</Badge>
   if (type === 'unallocated') return <Badge className="text-xs">Unallocated</Badge>
   return null
 }

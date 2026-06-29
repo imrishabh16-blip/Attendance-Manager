@@ -11,11 +11,10 @@ interface WorkTypeRow  { id: string; name: string }
 
 interface Props {
   onSelect:            (client_name: string, work_type: string) => void
-  onSelectOthers:      () => void
   onSelectUnallocated: () => void
 }
 
-export function ClientWorkSelector({ onSelect, onSelectOthers, onSelectUnallocated }: Props) {
+export function ClientWorkSelector({ onSelect, onSelectUnallocated }: Props) {
   const supabase = getSupabaseBrowserClient()
 
   // React Query caches both datasets at the QueryClient level (app root).
@@ -135,13 +134,6 @@ export function ClientWorkSelector({ onSelect, onSelectOthers, onSelectUnallocat
 
       {/* Alternatives */}
       <div className="flex flex-col gap-2 pt-1 border-t border-brand-200">
-        <button
-          onClick={onSelectOthers}
-          className="flex items-center gap-2 px-4 py-3 rounded-xl border border-dashed border-amber-300 text-sm text-amber-700 hover:bg-amber-50 transition-colors"
-        >
-          <span className="text-xs font-semibold px-1.5 py-0.5 bg-amber-100 rounded">?</span>
-          Others / Client Not In System
-        </button>
         <button
           onClick={onSelectUnallocated}
           className="flex items-center gap-2 px-4 py-3 rounded-xl border border-dashed border-brand-200 text-sm text-gray-500 hover:border-brand-300 hover:text-gray-700 transition-colors"

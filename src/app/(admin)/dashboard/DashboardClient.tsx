@@ -7,7 +7,7 @@ import { LiveActivityTable } from '@/components/dashboard/LiveActivityTable'
 import { Card, CardHeader, CardBody } from '@/components/ui/Card'
 import { Modal } from '@/components/ui/Modal'
 import { Table, Thead, Tbody, Th, Td } from '@/components/ui/Table'
-import { RefreshCw, UserCheck, UserX, Users, Flag, ChevronDown, Search, Download, Loader2 } from 'lucide-react'
+import { RefreshCw, UserCheck, UserX, Users, ChevronDown, Search, Download, Loader2 } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { cn, formatTime, workTypeBadgeColor } from '@/lib/utils'
 import type { TodaySessionItem } from '@/app/api/dashboard/today-sessions/route'
@@ -145,8 +145,8 @@ export default function DashboardClient({ profile: _ }: Props) {
       <div className="max-w-7xl mx-auto px-4 sm:px-6 py-6 space-y-6">
         {loading ? (
           <>
-            <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-              {[0, 1, 2, 3].map(i => (
+            <div className="grid grid-cols-2 lg:grid-cols-3 gap-3">
+              {[0, 1, 2].map(i => (
                 <div key={i} className="bg-white rounded-2xl border border-brand-200 shadow-sm p-4 flex flex-col gap-3 animate-pulse">
                   <div className="w-10 h-10 rounded-xl bg-brand-100" />
                   <div className="space-y-1.5">
@@ -161,7 +161,7 @@ export default function DashboardClient({ profile: _ }: Props) {
         ) : (
           <>
             {/* Metric strip — 4 cards */}
-            <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+            <div className="grid grid-cols-2 lg:grid-cols-3 gap-3">
               <MetricCard
                 label="Checked In Today"
                 value={s?.active_articles_today ?? 0}
@@ -182,14 +182,6 @@ export default function DashboardClient({ profile: _ }: Props) {
                 icon={UserX}
                 color="amber"
                 onClick={() => setOnLeaveOpen(true)}
-              />
-              <MetricCard
-                label="Flagged Records"
-                value={s?.flagged_attendance ?? 0}
-                icon={Flag}
-                color="red"
-                alert={(s?.flagged_attendance ?? 0) > 0}
-                href="/flagged"
               />
             </div>
 

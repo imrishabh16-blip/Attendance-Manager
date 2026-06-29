@@ -21,14 +21,12 @@ interface Props {
 
 type CheckInMode =
   | { kind: 'regular';     client_name: string; work_type: WorkType }
-  | { kind: 'others';      others_client_name?: string }
   | { kind: 'unallocated' }
 
 type Step =
   | 'idle'
   | 'gps_loading'
   | 'select'
-  | 'others_form'
   | 'note_input'
   | 'submitting'
 
@@ -54,7 +52,6 @@ export default function AttendClient({ profile }: Props) {
 
   const [step, setStep]               = useState<Step>('idle')
   const [note, setNote]               = useState('')
-  const [othersName, setOthersName]   = useState('')
   const [checkInMode, setCheckInMode] = useState<CheckInMode | null>(null)
   const [gpsCoords, setGpsCoords]     = useState<{ latitude: number; longitude: number } | null>(null)
   const [leaveLoading, setLeaveLoading] = useState(false)
@@ -106,10 +103,6 @@ export default function AttendClient({ profile }: Props) {
     setStep('note_input')
   }
 
-  function onSelectOthers() {
-    setStep('others_form')
-  }
-
   function onSelectUnallocated() {
     setCheckInMode({ kind: 'unallocated' })
     setStep('note_input')
@@ -130,14 +123,6 @@ export default function AttendClient({ profile }: Props) {
         longitude:       gpsCoords.longitude,
         note:            note || null,
       }
-    } else if (checkInMode.kind === 'others') {
-      body = {
-        attendance_type:    'others',
-        others_client_name: checkInMode.others_client_name || null,
-        latitude:           gpsCoords.latitude,
-        longitude:          gpsCoords.longitude,
-        note:               note || null,
-      }
     } else {
       body = {
         attendance_type: 'unallocated',
@@ -150,7 +135,6 @@ export default function AttendClient({ profile }: Props) {
     const onCheckInSuccess = () => {
       toast.success('Checked in successfully')
       setNote('')
-      setOthersName('')
       setCheckInMode(null)
     }
 
@@ -298,37 +282,8 @@ export default function AttendClient({ profile }: Props) {
             >
               <ClientWorkSelector
                 onSelect={onClientSelected}
-                onSelectOthers={onSelectOthers}
                 onSelectUnallocated={onSelectUnallocated}
               />
-            </Modal>
-
-            {/* Others client name */}
-            <Modal
-              open={step === 'others_form'}
-              onClose={() => setStep('idle')}
-              title="Others / Client Not In System"
-            >
-              <div className="flex flex-col gap-4">
-                <p className="text-sm text-gray-500">
-                  Your attendance will be recorded and flagged for admin review.
-                </p>
-                <input
-                  placeholder="Client name (optional)"
-                  value={othersName}
-                  onChange={e => setOthersName(e.target.value)}
-                  className="w-full px-3 py-2.5 rounded-xl border border-gray-300 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"
-                />
-                <Button
-                  onClick={() => {
-                    setCheckInMode({ kind: 'others', others_client_name: othersName || undefined })
-                    setStep('note_input')
-                  }}
-                  className="w-full"
-                >
-                  Continue
-                </Button>
-              </div>
             </Modal>
 
             {/* Note input — shared by check-in and check-out */}
@@ -409,16 +364,6 @@ function CheckInSummary({ mode }: { mode: CheckInMode }) {
       <div className="bg-brand-50 rounded-xl px-4 py-3">
         <p className="text-sm font-medium text-gray-900">{mode.client_name}</p>
         <p className="text-xs text-brand-600 mt-0.5">{mode.work_type}</p>
-      </div>
-    )
-  }
-  if (mode.kind === 'others') {
-    return (
-      <div className="bg-amber-50 rounded-xl px-4 py-3">
-        <p className="text-sm font-medium text-gray-900">
-          {mode.others_client_name || 'Others'}
-        </p>
-        <p className="text-xs text-amber-600 mt-0.5">Flagged for admin review</p>
       </div>
     )
   }
