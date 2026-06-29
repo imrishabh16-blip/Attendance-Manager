@@ -16,7 +16,7 @@ export function useAttendanceSession(userId: string) {
     // Compute fresh IST date on every load call — computing it at hook
     // init means a page open across midnight would query the wrong date.
     const today = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' })
-    const [{ data: records }, { data: leave }] = await Promise.all([
+    const [{ data: records, error: recordsError }, { data: leave }] = await Promise.all([
       supabase
         .from('attendance_records')
         .select('*, assignments(client_name, work_type)')
@@ -32,14 +32,21 @@ export function useAttendanceSession(userId: string) {
     ])
 
     const recs = (records ?? []) as AttendanceRecord[]
+    const open = recs.find(r => r.checked_in_at && !r.checked_out_at) ?? null
     setTodayRecords(recs)
-    setOpenRecord(recs.find(r => r.checked_in_at && !r.checked_out_at) ?? null)
+    setOpenRecord(open)
     setTodayLeave(leave)
     setLoading(false)
+
+    // Surface query errors so callers (e.g. post-network-failure verification)
+    // can distinguish "no record" from "couldn't reach the database".
+    if (recordsError) throw recordsError
+    return open
   }, [supabase, userId])
 
   useEffect(() => {
-    load()
+    // Mount load tolerates errors — the empty state set above is sufficient.
+    load().catch(() => {})
   }, [load])
 
   return { todayRecords, openRecord, todayLeave, loading, refresh: load }

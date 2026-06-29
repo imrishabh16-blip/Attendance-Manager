@@ -147,6 +147,13 @@ export default function AttendClient({ profile }: Props) {
       }
     }
 
+    const onCheckInSuccess = () => {
+      toast.success('Checked in successfully')
+      setNote('')
+      setOthersName('')
+      setCheckInMode(null)
+    }
+
     try {
       const res = await fetch('/api/attendance/checkin', {
         method:  'POST',
@@ -159,13 +166,23 @@ export default function AttendClient({ profile }: Props) {
         toast.error(typeof json.error === 'string' ? json.error : 'Check-in failed. Please try again.')
         return
       }
-      toast.success('Checked in successfully')
-      setNote('')
-      setOthersName('')
-      setCheckInMode(null)
-      await refresh()
+      onCheckInSuccess()
+      // UI refresh only — the write already succeeded, so a failure here must
+      // not be reported as a check-in failure.
+      try { await refresh() } catch { /* stale UI until next load; record is saved */ }
     } catch {
-      toast.error('Network error. Check your connection and try again.')
+      // The POST failed before a response arrived. The record may still have been
+      // written — verify via the existing session query before reporting failure.
+      try {
+        const open = await refresh()
+        if (open) {
+          onCheckInSuccess()
+        } else {
+          toast.error('Network error. Check your connection and try again.')
+        }
+      } catch {
+        toast.error("Couldn't verify whether your attendance was recorded. Please check your status or try again.")
+      }
     } finally {
       setStep('idle')
     }
