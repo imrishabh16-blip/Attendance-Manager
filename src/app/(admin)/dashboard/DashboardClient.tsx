@@ -1,13 +1,13 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useMemo } from 'react'
 import { useRealtimeDashboard } from '@/hooks/useRealtimeDashboard'
 import { MetricCard } from '@/components/dashboard/MetricCard'
 import { LiveActivityTable } from '@/components/dashboard/LiveActivityTable'
 import { Card, CardHeader, CardBody } from '@/components/ui/Card'
 import { Modal } from '@/components/ui/Modal'
 import { Table, Thead, Tbody, Th, Td } from '@/components/ui/Table'
-import { RefreshCw, UserCheck, UserX, Users, ChevronDown, Search, Download, Loader2 } from 'lucide-react'
+import { RefreshCw, UserCheck, UserX, Users, Layers, ChevronDown, Search, Download, Loader2 } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { cn, formatTime, workTypeBadgeColor } from '@/lib/utils'
 import type { TodaySessionItem } from '@/app/api/dashboard/today-sessions/route'
@@ -77,6 +77,24 @@ export default function DashboardClient({ profile: _ }: Props) {
     ? unallocatedRows.filter(r => r.article_name.toLowerCase().includes(unallocatedSearch.toLowerCase()))
     : unallocatedRows
 
+  // ── Work Wise modal ───────────────────────────────────────────────────────
+  // Distribution of currently checked-in articles across work types. Derived
+  // from liveActivity (open sessions only) — regular check-ins carry a
+  // work_type; unallocated/others rows have work_type = null and are excluded.
+  const [workWiseOpen, setWorkWiseOpen] = useState(false)
+
+  const workWiseCounts = useMemo(() => {
+    const map = new Map<string, number>()
+    for (const r of liveActivity) {
+      if (r.attendance_type === 'regular' && r.work_type) {
+        map.set(r.work_type, (map.get(r.work_type) ?? 0) + 1)
+      }
+    }
+    return [...map.entries()]
+      .map(([work_type, count]) => ({ work_type, count }))
+      .sort((a, b) => b.count - a.count || a.work_type.localeCompare(b.work_type))
+  }, [liveActivity])
+
   // ── On Leave modal ────────────────────────────────────────────────────────
   const [onLeaveOpen,   setOnLeaveOpen]   = useState(false)
   const [onLeaveSearch, setOnLeaveSearch] = useState('')
@@ -145,8 +163,8 @@ export default function DashboardClient({ profile: _ }: Props) {
       <div className="max-w-7xl mx-auto px-4 sm:px-6 py-6 space-y-6">
         {loading ? (
           <>
-            <div className="grid grid-cols-2 lg:grid-cols-3 gap-3">
-              {[0, 1, 2].map(i => (
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+              {[0, 1, 2, 3].map(i => (
                 <div key={i} className="bg-white rounded-2xl border border-brand-200 shadow-sm p-4 flex flex-col gap-3 animate-pulse">
                   <div className="w-10 h-10 rounded-xl bg-brand-100" />
                   <div className="space-y-1.5">
@@ -161,7 +179,7 @@ export default function DashboardClient({ profile: _ }: Props) {
         ) : (
           <>
             {/* Metric strip — 4 cards */}
-            <div className="grid grid-cols-2 lg:grid-cols-3 gap-3">
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
               <MetricCard
                 label="Checked In Today"
                 value={s?.active_articles_today ?? 0}
@@ -182,6 +200,13 @@ export default function DashboardClient({ profile: _ }: Props) {
                 icon={UserX}
                 color="amber"
                 onClick={() => setOnLeaveOpen(true)}
+              />
+              <MetricCard
+                label="Work Wise"
+                value={workWiseCounts.length}
+                icon={Layers}
+                color="purple"
+                onClick={() => setWorkWiseOpen(true)}
               />
             </div>
 
@@ -386,6 +411,38 @@ export default function DashboardClient({ profile: _ }: Props) {
               </li>
             ))}
           </ul>
+        )}
+      </Modal>
+
+      {/* ── Work Wise modal ── */}
+      <Modal
+        open={workWiseOpen}
+        onClose={() => setWorkWiseOpen(false)}
+        title="Work Wise Articles"
+      >
+        {workWiseCounts.length === 0 ? (
+          <p className="text-sm text-gray-400 text-center py-6">No articles currently on client work</p>
+        ) : (
+          <Table>
+            <Thead>
+              <tr>
+                <Th>Work Type</Th>
+                <Th>Count</Th>
+              </tr>
+            </Thead>
+            <Tbody>
+              {workWiseCounts.map(row => (
+                <tr key={row.work_type}>
+                  <Td>
+                    <span className="font-medium text-gray-900">{row.work_type}</span>
+                  </Td>
+                  <Td>
+                    <span className="font-semibold text-gray-900">{row.count}</span>
+                  </Td>
+                </tr>
+              ))}
+            </Tbody>
+          </Table>
         )}
       </Modal>
     </div>
