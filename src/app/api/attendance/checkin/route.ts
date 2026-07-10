@@ -103,18 +103,18 @@ export async function POST(req: NextRequest) {
     if (existing) {
       resolvedAssignmentId = existing.id
     } else {
-      // 2. Check if an archived assignment exists — block re-creation until admin reactivates
-      const { data: archived } = await supabase
+      // 2. Check if an inactive assignment exists — block re-creation until admin reactivates
+      const { data: inactive } = await supabase
         .from('assignments')
         .select('id')
         .eq('client_name', client_name as string)
         .eq('work_type', work_type as WorkType)
-        .eq('status', 'archived')
+        .eq('status', 'inactive')
         .maybeSingle()
 
-      if (archived) {
+      if (inactive) {
         return NextResponse.json(
-          { error: `${client_name} (${work_type}) has been archived. Ask your admin to reactivate it.` },
+          { error: `${client_name} (${work_type}) has been deactivated. Ask your admin to reactivate it.` },
           { status: 409 }
         )
       }

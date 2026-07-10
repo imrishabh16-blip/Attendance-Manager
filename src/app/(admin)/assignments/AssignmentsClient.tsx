@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import { Modal } from '@/components/ui/Modal'
 import { Button } from '@/components/ui/Button'
@@ -12,7 +12,7 @@ import toast from 'react-hot-toast'
 import { getSupabaseBrowserClient } from '@/lib/supabase/client'
 import { Plus, Search, Archive, Trash2, Upload, FileDown, CheckCircle2, AlertCircle } from 'lucide-react'
 import type { Assignment, Client, UserRole } from '@/types/app'
-import { useRouter } from 'next/navigation'
+import { useRouter, usePathname, useSearchParams } from 'next/navigation'
 
 interface WorkTypeRow { id: string; name: string }
 
@@ -32,6 +32,15 @@ interface ImportResults {
   errors:   number
 }
 
+type StatusFilter = 'all' | 'active' | 'inactive'
+
+// Guards against a malformed/hand-edited ?status= value in the URL —
+// anything unrecognized falls back to the same 'active' default the
+// component used before URL persistence existed.
+function parseStatusFilter(value: string | null): StatusFilter {
+  return value === 'all' || value === 'active' || value === 'inactive' ? value : 'active'
+}
+
 export default function AssignmentsClient({
   assignments: initial,
   clients: initialClients,
@@ -40,6 +49,8 @@ export default function AssignmentsClient({
 }: Props) {
   const supabase      = getSupabaseBrowserClient()
   const router        = useRouter()
+  const pathname      = usePathname()
+  const searchParams  = useSearchParams()
   const queryClient   = useQueryClient()
 
   // ── Tab ───────────────────────────────────────────────────────────────
@@ -47,9 +58,14 @@ export default function AssignmentsClient({
 
   // ── Assignments ───────────────────────────────────────────────────────
   const [assignments, setAssignments] = useState(initial)
-  const [query, setQuery]             = useState('')
-  const [statusFilter, setStatus]     = useState<'all' | 'active' | 'archived'>('active')
-  const [wtFilter, setWtFilter]       = useState<string>('all')
+  // All three filters initialize from the URL so a browser refresh, a shared
+  // link, or navigating Back from an assignment's detail page restore the
+  // complete view — search term, status, and work type — not just the search.
+  const [query, setQuery]             = useState(searchParams.get('q') ?? '')
+  const [statusFilter, setStatus]     = useState<StatusFilter>(
+    parseStatusFilter(searchParams.get('status'))
+  )
+  const [wtFilter, setWtFilter]       = useState<string>(searchParams.get('workType') || 'all')
   const [showCreate, setShowCreate]   = useState(false)
   const [saving, setSaving]           = useState(false)
   const [form, setForm] = useState({ client_name: '', work_type: '', notes: '' })
@@ -60,6 +76,26 @@ export default function AssignmentsClient({
     const matchWt     = wtFilter === 'all' || a.work_type === wtFilter
     return matchStatus && matchQuery && matchWt
   })
+
+  // Mirror all three filters into the URL (debounced, replacing the current
+  // history entry rather than pushing a new one per change). This is what
+  // makes the browser Back button restore the full view: the list page's
+  // history entry carries ?q=&status=&workType=, so returning to it re-renders
+  // AssignmentsClient with all three already applied via the initial state
+  // above, and `filtered` (derived from them) comes back with it automatically.
+  // Each param is omitted when it equals its default, keeping the URL for the
+  // default view clean (plain /assignments).
+  useEffect(() => {
+    const handle = setTimeout(() => {
+      const params = new URLSearchParams()
+      if (query)                     params.set('q', query)
+      if (statusFilter !== 'active') params.set('status', statusFilter)
+      if (wtFilter !== 'all')        params.set('workType', wtFilter)
+      const qs = params.toString()
+      router.replace(qs ? `${pathname}?${qs}` : pathname, { scroll: false })
+    }, 400)
+    return () => clearTimeout(handle)
+  }, [query, statusFilter, wtFilter, pathname, router])
 
   async function createAssignment() {
     if (!form.client_name.trim()) { toast.error('Client name required'); return }
@@ -78,12 +114,12 @@ export default function AssignmentsClient({
     setSaving(false)
   }
 
-  async function toggleArchive(a: Assignment) {
-    const newStatus = a.status === 'active' ? 'archived' : 'active'
+  async function toggleStatus(a: Assignment) {
+    const newStatus = a.status === 'active' ? 'inactive' : 'active'
     const { error } = await supabase.from('assignments').update({ status: newStatus }).eq('id', a.id)
     if (error) { toast.error(error.message); return }
     setAssignments(prev => prev.map(x => x.id === a.id ? { ...x, status: newStatus } : x))
-    toast.success(newStatus === 'archived' ? 'Assignment archived' : 'Assignment reactivated')
+    toast.success(newStatus === 'inactive' ? 'Assignment deactivated' : 'Assignment reactivated')
   }
 
   // ── Clients ───────────────────────────────────────────────────────────
@@ -293,7 +329,7 @@ export default function AssignmentsClient({
                 />
               </div>
               <div className="flex gap-2">
-                {(['active', 'archived', 'all'] as const).map(s => (
+                {(['active', 'inactive', 'all'] as const).map(s => (
                   <button key={s} onClick={() => setStatus(s)}
                     className={cn(
                       'px-4 py-2.5 rounded-xl text-sm font-medium transition-colors focus:outline-none focus:ring-2 focus:ring-brand-500 focus:ring-offset-1',
@@ -347,8 +383,8 @@ export default function AssignmentsClient({
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2 flex-wrap">
                         <span className="font-medium text-gray-900">{a.client_name}</span>
-                        {a.status === 'archived' && (
-                          <Badge variant="warning" className="text-xs">Archived</Badge>
+                        {a.status === 'inactive' && (
+                          <Badge variant="warning" className="text-xs">Inactive</Badge>
                         )}
                       </div>
                       <span className={cn('inline-block text-xs font-medium px-2 py-0.5 rounded-full mt-1', workTypeBadgeColor(a.work_type))}>
@@ -361,9 +397,9 @@ export default function AssignmentsClient({
                         className="text-xs text-brand-600 hover:text-brand-700 font-medium px-2 py-1.5 rounded-lg hover:bg-brand-50">
                         View
                       </button>
-                      <button onClick={() => toggleArchive(a)}
+                      <button onClick={() => toggleStatus(a)}
                         className="text-xs text-gray-400 hover:text-gray-600 p-1.5 rounded-lg hover:bg-gray-50"
-                        title={a.status === 'active' ? 'Archive' : 'Reactivate'}>
+                        title={a.status === 'active' ? 'Deactivate' : 'Reactivate'}>
                         <Archive className="h-4 w-4" />
                       </button>
                     </div>

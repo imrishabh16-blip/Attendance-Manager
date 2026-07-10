@@ -185,7 +185,7 @@ export default function ReportsClient({ articles, assignments }: Props) {
                   <option value={ALL_ASSIGNMENTS}>All Assignments</option>
                   {assignments.map(a => (
                     <option key={a.id} value={a.id}>
-                      {`${a.client_name} — ${a.work_type}${a.status !== 'active' ? ' (Archived)' : ''}`}
+                      {`${a.client_name} — ${a.work_type}${a.status !== 'active' ? ' (Inactive)' : ''}`}
                     </option>
                   ))}
                 </select>

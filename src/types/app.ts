@@ -3,7 +3,7 @@ export type UserStatus = 'pending' | 'active' | 'deactivated'
 // WorkType is now a flexible string — maintained in the work_types DB table.
 // The union was removed to support admin-defined custom work types.
 export type WorkType = string
-export type AssignmentStatus = 'active' | 'archived'
+export type AssignmentStatus = 'active' | 'inactive'
 export type CycleStatus = 'active' | 'closed'
 export type AttendanceType = 'regular' | 'others' | 'unallocated'
 

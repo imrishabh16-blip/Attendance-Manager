@@ -1,0 +1,28 @@
+-- ============================================================================
+-- MIGRATION 00023: Rename assignment status "archived" to "inactive"
+-- ============================================================================
+-- Terminology change only — no schema, RLS, or behavioral change.
+--
+-- assignment_status is a Postgres enum (defined in 00001_init_schema.sql).
+-- RENAME VALUE updates the enum label in place; the underlying OID for each
+-- existing row is unchanged, so every assignment currently 'archived'
+-- immediately reads as 'inactive' with no UPDATE statement and no row
+-- rewrite. This is why no data-migration step is needed here.
+--
+-- Unaffected by this rename (verified — neither references the literal
+-- 'archived' value):
+--   - RLS policies on assignments (00002_rls_policies.sql) only compare
+--     against 'active'; there is no policy conditioned on 'archived'.
+--   - The unique partial index from 00018_reliability_hardening.sql filters
+--     on status = 'active' only.
+--   - attendance_records / leave_records reference assignments.id, not
+--     assignments.status — historical attendance and every report/export
+--     that joins against assignments (Attendance Report, Session Report,
+--     Assignment Experience) are unaffected by this rename.
+--
+-- Do not modify prior migrations — comments in 00001, 00002, 00009, and
+-- 00018 that mention "archived" are historical record of what was true at
+-- the time they were written and are left as-is.
+-- ============================================================================
+
+alter type assignment_status rename value 'archived' to 'inactive';
