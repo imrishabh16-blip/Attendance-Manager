@@ -3,6 +3,7 @@
 import { useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { getSupabaseBrowserClient } from '@/lib/supabase/client'
+import { isArticleRole } from '@/types/app'
 
 export default function DeactivatedPage() {
   const router  = useRouter()
@@ -22,7 +23,7 @@ export default function DeactivatedPage() {
 
       if (!profile) return
       if (profile.status === 'active') {
-        router.replace(profile.role === 'article' ? '/attend' : '/dashboard')
+        router.replace(isArticleRole(profile.role) ? '/attend' : '/dashboard')
       }
     }, 10_000)
 

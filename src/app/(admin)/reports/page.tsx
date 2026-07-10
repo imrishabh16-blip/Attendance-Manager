@@ -1,6 +1,7 @@
 import { redirect } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
 import ReportsClient from './ReportsClient'
+import { ARTICLE_ROLES, isArticleRole } from '@/types/app'
 
 export default async function ReportsPage() {
   const supabase = await createClient()
@@ -14,13 +15,13 @@ export default async function ReportsPage() {
     .single()
 
   if (!profile || profile.status !== 'active') redirect(profile?.status === 'deactivated' ? '/deactivated' : '/awaiting')
-  if (profile.role === 'article') redirect('/attend')
+  if (isArticleRole(profile.role)) redirect('/attend')
 
   const [{ data: articles }, { data: assignments }] = await Promise.all([
     supabase
       .from('profiles')
       .select('id, full_name')
-      .eq('role', 'article')
+      .in('role', ARTICLE_ROLES)
       .eq('status', 'active')
       .order('full_name'),
     supabase

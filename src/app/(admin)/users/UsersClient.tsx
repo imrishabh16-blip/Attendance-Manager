@@ -15,7 +15,7 @@ interface Props {
   currentUserRole: UserRole
 }
 
-const ALL_ROLES: UserRole[] = ['article', 'manager', 'partner', 'admin']
+const ALL_ROLES: UserRole[] = ['article', 'intern', 'manager', 'partner', 'admin']
 
 export default function UsersClient({ users: initial, currentUserId, currentUserRole }: Props) {
   const [users, setUsers]               = useState(initial)
@@ -30,7 +30,7 @@ export default function UsersClient({ users: initial, currentUserId, currentUser
   const isAdmin     = currentUserRole === 'admin'
   const canEditRoles = currentUserRole === 'admin' || currentUserRole === 'partner'
   // Partners cannot elevate to admin — mirrors server-side guard
-  const editableRoles: UserRole[] = isAdmin ? ALL_ROLES : ['article', 'manager', 'partner']
+  const editableRoles: UserRole[] = isAdmin ? ALL_ROLES : ['article', 'intern', 'manager', 'partner']
 
   function openRoleModal(u: Profile) {
     setSelectedRole(u.role)
@@ -258,6 +258,7 @@ export default function UsersClient({ users: initial, currentUserId, currentUser
 function RoleBadge({ role }: { role: UserRole }) {
   const map: Record<UserRole, { label: string; variant: 'info' | 'success' | 'danger' | 'default' }> = {
     article: { label: 'Article',  variant: 'default' },
+    intern:  { label: 'Intern',   variant: 'default' },
     manager: { label: 'Manager',  variant: 'info' },
     partner: { label: 'Partner',  variant: 'success' },
     admin:   { label: 'Admin',    variant: 'danger' },

@@ -4,6 +4,7 @@ import { useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { getSupabaseBrowserClient } from '@/lib/supabase/client'
 import { Spinner } from '@/components/ui/Spinner'
+import { isArticleRole } from '@/types/app'
 
 export default function AwaitingPage() {
   const router = useRouter()
@@ -23,7 +24,7 @@ export default function AwaitingPage() {
 
       if (!profile) return
       if (profile.status === 'active') {
-        router.replace(profile.role === 'article' ? '/attend' : '/dashboard')
+        router.replace(isArticleRole(profile.role) ? '/attend' : '/dashboard')
       }
       if (profile.status === 'deactivated') {
         router.replace('/deactivated')

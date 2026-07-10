@@ -1,6 +1,7 @@
 import { redirect } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
 import DashboardClient from './DashboardClient'
+import { isArticleRole } from '@/types/app'
 
 export default async function DashboardPage() {
   const supabase = await createClient()
@@ -14,7 +15,7 @@ export default async function DashboardPage() {
     .single()
 
   if (!profile || profile.status !== 'active') redirect(profile?.status === 'deactivated' ? '/deactivated' : '/awaiting')
-  if (profile.role === 'article') redirect('/attend')
+  if (isArticleRole(profile.role)) redirect('/attend')
 
   return <DashboardClient profile={profile} />
 }

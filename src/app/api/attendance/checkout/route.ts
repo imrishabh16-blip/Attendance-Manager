@@ -1,6 +1,7 @@
 import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { NextRequest, NextResponse } from 'next/server'
+import { isArticleRole } from '@/types/app'
 
 export async function POST(req: NextRequest) {
   const supabase = await createClient()
@@ -16,7 +17,7 @@ export async function POST(req: NextRequest) {
   if (!profile || profile.status !== 'active') {
     return NextResponse.json({ error: 'Account not active' }, { status: 403 })
   }
-  if (profile.role !== 'article') {
+  if (!isArticleRole(profile.role)) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   }
 

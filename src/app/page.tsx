@@ -1,5 +1,6 @@
 import { redirect } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
+import { isArticleRole } from '@/types/app'
 
 // Root page: redirect based on session + role
 export default async function RootPage() {
@@ -16,6 +17,6 @@ export default async function RootPage() {
 
   if (!profile || profile.status === 'pending') redirect('/awaiting')
   if (profile.status === 'deactivated') redirect('/deactivated')
-  if (profile.role === 'article') redirect('/attend')
+  if (isArticleRole(profile.role)) redirect('/attend')
   redirect('/dashboard')
 }

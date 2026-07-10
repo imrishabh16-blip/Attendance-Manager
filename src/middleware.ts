@@ -2,6 +2,7 @@ import { createServerClient } from '@supabase/ssr'
 import type { CookieOptions } from '@supabase/ssr'
 import { NextResponse } from 'next/server'
 import type { NextRequest } from 'next/server'
+import { isArticleRole } from '@/types/app'
 
 const PUBLIC_PATHS = ['/login', '/awaiting', '/deactivated']
 const API_PUBLIC   = ['/api/auth']
@@ -64,8 +65,8 @@ export async function middleware(request: NextRequest) {
 
   const { role } = profile
 
-  // Article routing: can only access /attend
-  if (role === 'article') {
+  // Article/Intern routing: can only access /attend
+  if (isArticleRole(role)) {
     if (!pathname.startsWith('/attend') && !pathname.startsWith('/api/attendance') && !pathname.startsWith('/api/leave')) {
       return NextResponse.redirect(new URL('/attend', request.url))
     }

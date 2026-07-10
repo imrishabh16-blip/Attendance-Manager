@@ -2,6 +2,7 @@ import { createClient } from '@/lib/supabase/server'
 import { buildAttendanceExcel } from '@/lib/export'
 import type { AttendanceExportRow } from '@/lib/export'
 import { NextRequest, NextResponse } from 'next/server'
+import { ARTICLE_ROLES } from '@/types/app'
 
 const ALLOWED_ROLES = ['admin', 'partner', 'manager']
 
@@ -92,8 +93,8 @@ export async function GET(req: NextRequest) {
       p_article_id: articleId ?? null,
     }),
     (articleId
-      ? supabase.from('profiles').select('id, full_name').eq('id', articleId).eq('role', 'article').eq('status', 'active')
-      : supabase.from('profiles').select('id, full_name').eq('role', 'article').eq('status', 'active').order('full_name')
+      ? supabase.from('profiles').select('id, full_name').eq('id', articleId).in('role', ARTICLE_ROLES).eq('status', 'active')
+      : supabase.from('profiles').select('id, full_name').in('role', ARTICLE_ROLES).eq('status', 'active').order('full_name')
     ),
     (articleId
       ? supabase.from('leave_records').select('article_id, leave_date').gte('leave_date', startDate).lte('leave_date', endDate).eq('article_id', articleId)

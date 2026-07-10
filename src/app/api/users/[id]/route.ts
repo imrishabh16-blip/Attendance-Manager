@@ -3,7 +3,7 @@ import { createAdminClient } from '@/lib/supabase/admin'
 import { NextRequest, NextResponse } from 'next/server'
 import type { UserRole } from '@/types/app'
 
-const VALID_ROLES: UserRole[] = ['article', 'manager', 'partner', 'admin']
+const VALID_ROLES: UserRole[] = ['article', 'intern', 'manager', 'partner', 'admin']
 
 // PATCH /api/users/[id] — approve | deactivate | reactivate | change_role
 export async function PATCH(

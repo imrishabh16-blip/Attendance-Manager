@@ -1,6 +1,7 @@
 import { redirect } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
 import AdminNav from '@/components/layout/AdminNav'
+import { isArticleRole } from '@/types/app'
 
 export default async function AdminLayout({ children }: { children: React.ReactNode }) {
   const supabase = await createClient()
@@ -14,7 +15,7 @@ export default async function AdminLayout({ children }: { children: React.ReactN
     .single()
 
   if (!profile || profile.status !== 'active') redirect(profile?.status === 'deactivated' ? '/deactivated' : '/awaiting')
-  if (profile.role === 'article') redirect('/attend')
+  if (isArticleRole(profile.role)) redirect('/attend')
 
   return (
     <div className="flex min-h-screen">

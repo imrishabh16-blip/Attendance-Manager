@@ -1,6 +1,7 @@
 import { createClient } from '@/lib/supabase/server'
 import { buildStatusReportExcel, type StatusReportRow } from '@/lib/export'
 import { NextResponse } from 'next/server'
+import { ARTICLE_ROLES } from '@/types/app'
 
 const ALLOWED_ROLES = ['admin', 'partner', 'manager']
 
@@ -64,7 +65,7 @@ export async function GET() {
     supabase
       .from('profiles')
       .select('id, full_name')
-      .eq('role', 'article')
+      .in('role', ARTICLE_ROLES)
       .eq('status', 'active')
       .order('full_name'),
 

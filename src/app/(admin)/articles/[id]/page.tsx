@@ -6,7 +6,7 @@ import { Badge } from '@/components/ui/Badge'
 import { ArrowLeft, MapPin } from 'lucide-react'
 import { buildMapsLink } from '@/lib/gps'
 import { formatDate, workTypeBadgeColor, cn } from '@/lib/utils'
-import type { UserStatus, AttendanceType } from '@/types/app'
+import { isArticleRole, type UserStatus, type AttendanceType } from '@/types/app'
 
 // IST-aware formatters for server components
 const fmtTimeIST = (iso: string) =>
@@ -51,7 +51,7 @@ export default async function ArticleDetailPage({
   if (!viewer || viewer.status !== 'active') {
     redirect(viewer?.status === 'deactivated' ? '/deactivated' : '/awaiting')
   }
-  if (viewer.role === 'article') redirect('/attend')
+  if (isArticleRole(viewer.role)) redirect('/attend')
 
   // Fetch the article profile
   const { data: article } = await supabase
@@ -60,7 +60,7 @@ export default async function ArticleDetailPage({
     .eq('id', id)
     .single()
 
-  if (!article || article.role !== 'article') notFound()
+  if (!article || !isArticleRole(article.role)) notFound()
 
   // Fetch recent attendance (last 60 sessions, newest first)
   const { data: sessions } = await supabase

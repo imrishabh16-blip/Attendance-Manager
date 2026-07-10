@@ -3,7 +3,7 @@ import { createClient } from '@/lib/supabase/server'
 import Link from 'next/link'
 import { Card } from '@/components/ui/Card'
 import { Badge } from '@/components/ui/Badge'
-import type { UserStatus } from '@/types/app'
+import { ARTICLE_ROLES, isArticleRole, type UserStatus } from '@/types/app'
 
 function StatusBadge({ status }: { status: UserStatus }) {
   if (status === 'active')      return <Badge variant="success" className="text-xs">Active</Badge>
@@ -25,12 +25,12 @@ export default async function ArticlesPage() {
   if (!profile || profile.status !== 'active') {
     redirect(profile?.status === 'deactivated' ? '/deactivated' : '/awaiting')
   }
-  if (profile.role === 'article') redirect('/attend')
+  if (isArticleRole(profile.role)) redirect('/attend')
 
   const { data: articles } = await supabase
     .from('profiles')
     .select('id, full_name, email, status')
-    .eq('role', 'article')
+    .in('role', ARTICLE_ROLES)
     .order('full_name')
 
   const list = articles ?? []

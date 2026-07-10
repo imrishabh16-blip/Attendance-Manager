@@ -1,6 +1,7 @@
 import { redirect } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
 import AttendClient from './AttendClient'
+import { isArticleRole } from '@/types/app'
 
 export default async function AttendPage() {
   const supabase = await createClient()
@@ -14,7 +15,7 @@ export default async function AttendPage() {
     .single()
 
   if (!profile || profile.status !== 'active') redirect(profile?.status === 'deactivated' ? '/deactivated' : '/awaiting')
-  if (profile.role !== 'article') redirect('/dashboard')
+  if (!isArticleRole(profile.role)) redirect('/dashboard')
 
   return <AttendClient profile={profile} />
 }

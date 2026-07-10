@@ -1,6 +1,7 @@
 import { redirect } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
 import AssignmentsClient from './AssignmentsClient'
+import { isArticleRole } from '@/types/app'
 
 export default async function AssignmentsPage() {
   const supabase = await createClient()
@@ -14,7 +15,7 @@ export default async function AssignmentsPage() {
     .single()
 
   if (!profile || profile.status !== 'active') redirect(profile?.status === 'deactivated' ? '/deactivated' : '/awaiting')
-  if (profile.role === 'article') redirect('/attend')
+  if (isArticleRole(profile.role)) redirect('/attend')
 
   const [{ data: assignments }, { data: clients }, { data: workTypesData }] = await Promise.all([
     supabase.from('assignments').select('*').order('client_name'),

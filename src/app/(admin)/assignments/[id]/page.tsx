@@ -5,6 +5,7 @@ import { Card, CardHeader, CardBody } from '@/components/ui/Card'
 import { Badge } from '@/components/ui/Badge'
 import { formatDate, workTypeBadgeColor, cn } from '@/lib/utils'
 import { ArrowLeft } from 'lucide-react'
+import { isArticleRole } from '@/types/app'
 
 type AttendanceRecordRow = {
   article_id:      string
@@ -103,7 +104,7 @@ export default async function AssignmentDetailPage({
     .single()
 
   if (!profile || profile.status !== 'active') redirect(profile?.status === 'deactivated' ? '/deactivated' : '/awaiting')
-  if (profile.role === 'article') redirect('/attend')
+  if (isArticleRole(profile.role)) redirect('/attend')
 
   const { data: assignment } = await supabase
     .from('assignments')

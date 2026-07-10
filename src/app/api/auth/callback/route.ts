@@ -1,5 +1,6 @@
 import { createClient } from '@/lib/supabase/server'
 import { NextRequest, NextResponse } from 'next/server'
+import { isArticleRole } from '@/types/app'
 
 export async function GET(request: NextRequest) {
   const { searchParams, origin } = new URL(request.url)
@@ -46,7 +47,7 @@ export async function GET(request: NextRequest) {
   if (profile.status === 'deactivated') {
     return NextResponse.redirect(`${origin}/deactivated`)
   }
-  if (profile.role === 'article') {
+  if (isArticleRole(profile.role)) {
     return NextResponse.redirect(`${origin}/attend`)
   }
   return NextResponse.redirect(`${origin}/dashboard`)

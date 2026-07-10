@@ -1,6 +1,6 @@
 import { createClient } from '@/lib/supabase/server'
 import { NextResponse } from 'next/server'
-import type { AttendanceType } from '@/types/app'
+import { isArticleRole, type AttendanceType } from '@/types/app'
 
 export interface TodaySessionItem {
   id:              string
@@ -24,7 +24,7 @@ export async function GET() {
     .eq('id', session.user.id)
     .single()
 
-  if (!viewer || viewer.status !== 'active' || viewer.role === 'article') {
+  if (!viewer || viewer.status !== 'active' || isArticleRole(viewer.role)) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   }
 

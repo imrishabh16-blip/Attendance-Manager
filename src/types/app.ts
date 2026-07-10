@@ -1,4 +1,4 @@
-export type UserRole = 'article' | 'manager' | 'partner' | 'admin'
+export type UserRole = 'article' | 'intern' | 'manager' | 'partner' | 'admin'
 export type UserStatus = 'pending' | 'active' | 'deactivated'
 // WorkType is now a flexible string — maintained in the work_types DB table.
 // The union was removed to support admin-defined custom work types.
@@ -124,3 +124,14 @@ export const WORK_TYPES: string[] = [
 ]
 
 export const ELEVATED_ROLES: UserRole[] = ['admin', 'partner', 'manager']
+
+// Roles that behave exactly like Article: Attend page access, own-attendance
+// permissions, and inclusion in every Article-scoped dashboard/report query.
+export const ARTICLE_ROLES: UserRole[] = ['article', 'intern']
+
+// Single source of truth for the "is this an Article-equivalent role" check —
+// future roles that should behave like Article only need to be added to
+// ARTICLE_ROLES above; every call site stays correct automatically.
+export function isArticleRole(role: UserRole): boolean {
+  return ARTICLE_ROLES.includes(role)
+}
