@@ -1,11 +1,10 @@
 import { redirect, notFound } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
-import Link from 'next/link'
 import { Card, CardHeader, CardBody } from '@/components/ui/Card'
 import { Badge } from '@/components/ui/Badge'
 import { formatDate, workTypeBadgeColor, cn } from '@/lib/utils'
-import { ArrowLeft } from 'lucide-react'
 import { isArticleRole } from '@/types/app'
+import { BackButton } from './BackButton'
 
 type AttendanceRecordRow = {
   article_id:      string
@@ -129,13 +128,7 @@ export default async function AssignmentDetailPage({
       {/* Header */}
       <div className="bg-white border-b border-brand-200 px-4 sm:px-6 py-4">
         <div className="max-w-3xl mx-auto">
-          <Link
-            href="/assignments"
-            className="inline-flex items-center gap-1.5 text-sm text-gray-500 hover:text-gray-700 mb-3"
-          >
-            <ArrowLeft className="h-4 w-4" />
-            Back to Assignments
-          </Link>
+          <BackButton />
 
           <div className="flex items-start justify-between gap-3 flex-wrap">
             <div>
