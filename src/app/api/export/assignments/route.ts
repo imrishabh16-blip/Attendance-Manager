@@ -1,30 +1,41 @@
 import { createClient } from '@/lib/supabase/server'
 import { buildSessionReportExcel } from '@/lib/export'
-import type { SessionReportRow } from '@/lib/export'
+import { deriveSessionReport, type RawSessionRecord } from '@/lib/sessionReport'
 import { NextRequest, NextResponse } from 'next/server'
 
 const ALLOWED_ROLES = ['admin', 'partner', 'manager']
 
-function daysBetween(a: string, b: string): number {
-  const [ay, am, ad] = a.split('-').map(Number)
-  const [by, bm, bd] = b.split('-').map(Number)
-  return (Date.UTC(by, bm - 1, bd) - Date.UTC(ay, am - 1, ad)) / 86_400_000
-}
-
-type RawRecord = {
+type RawRow = {
   article_id:      string
   attendance_date: string
   checked_in_at:   string
   checked_out_at:  string | null
+  assignment_id:   string
   profiles:        { full_name: string } | { full_name: string }[] | null
+  assignments:     { client_name: string; work_type: string } | { client_name: string; work_type: string }[] | null
 }
 
-function extractName(profiles: RawRecord['profiles']): string {
+function extractName(profiles: RawRow['profiles']): string {
   if (Array.isArray(profiles)) return profiles[0]?.full_name ?? ''
   if (profiles) return profiles.full_name
   return ''
 }
 
+function extractAssignment(
+  assignments: RawRow['assignments']
+): { client_name: string; work_type: string } | null {
+  if (Array.isArray(assignments)) return assignments[0] ?? null
+  return assignments
+}
+
+// GET /api/export/assignments — Session Report
+//
+// ?assignment_id=<uuid>  optional — omit (or empty) for "All Assignments"
+// ?format=json            optional — returns { rows: SessionReportRow[] }
+//                          instead of an .xlsx file. Used by the in-app
+//                          Preview modal so it renders EXACTLY the same data
+//                          the Excel export produces — both paths call
+//                          deriveSessionReport() against the same query.
 export async function GET(req: NextRequest) {
   const supabase = await createClient()
   const { data: { session } } = await supabase.auth.getSession()
@@ -41,102 +52,71 @@ export async function GET(req: NextRequest) {
   }
 
   const { searchParams } = new URL(req.url)
-  const assignmentId = searchParams.get('assignment_id')
-  if (!assignmentId) return NextResponse.json({ error: 'assignment_id required' }, { status: 400 })
+  const assignmentId = searchParams.get('assignment_id') || null
+  const wantsJson     = searchParams.get('format') === 'json'
 
-  const { data: assignment, error: assignmentError } = await supabase
-    .from('assignments')
-    .select('id, client_name, work_type')
-    .eq('id', assignmentId)
-    .single()
+  let assignmentClientName: string | null = null
 
-  if (assignmentError || !assignment) {
-    return NextResponse.json({ error: 'Assignment not found' }, { status: 404 })
+  if (assignmentId) {
+    const { data: assignment, error: assignmentError } = await supabase
+      .from('assignments')
+      .select('id, client_name')
+      .eq('id', assignmentId)
+      .single()
+
+    if (assignmentError || !assignment) {
+      return NextResponse.json({ error: 'Assignment not found' }, { status: 404 })
+    }
+    assignmentClientName = assignment.client_name
   }
 
-  const { data: rawRecords, error: recordsError } = await supabase
+  // Single query, joined with assignments + profiles — no N+1 regardless of
+  // whether this is scoped to one assignment or "All Assignments".
+  // (Built via reassignment rather than a ternary of two full chains —
+  // branching the chain itself blows up supabase-js's generic inference.)
+  let recordsQuery = supabase
     .from('attendance_records')
-    .select('article_id, attendance_date, checked_in_at, checked_out_at, profiles!article_id(full_name)')
-    .eq('assignment_id', assignmentId)
+    .select('article_id, attendance_date, checked_in_at, checked_out_at, assignment_id, profiles!article_id(full_name), assignments(client_name, work_type)')
     .not('checked_in_at', 'is', null)
+    .not('assignment_id', 'is', null)
     .order('attendance_date', { ascending: true })
 
+  if (assignmentId) {
+    recordsQuery = recordsQuery.eq('assignment_id', assignmentId)
+  }
+
+  const { data: rawRecords, error: recordsError } = await recordsQuery
   if (recordsError) return NextResponse.json({ error: recordsError.message }, { status: 500 })
 
-  const records     = (rawRecords ?? []) as RawRecord[]
-  const todayIST    = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' })
-  const assignLabel = `${assignment.client_name} — ${assignment.work_type}`
-  const safeClient  = assignment.client_name.replace(/[^a-zA-Z0-9]+/g, '_')
-  const filename    = `session_report_${safeClient}_${todayIST}.xlsx`
-
-  if (records.length === 0) {
-    const buffer = await buildSessionReportExcel([])
-    return new NextResponse(new Uint8Array(buffer), {
-      headers: {
-        'Content-Type':        'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-        'Content-Disposition': `attachment; filename="${filename}"`,
-      },
+  const records: RawSessionRecord[] = ((rawRecords ?? []) as RawRow[])
+    .map(r => {
+      const asgn = extractAssignment(r.assignments)
+      if (!asgn) return null
+      return {
+        article_id:      r.article_id,
+        attendance_date: r.attendance_date,
+        checked_in_at:   r.checked_in_at,
+        checked_out_at:  r.checked_out_at,
+        assignment_id:   r.assignment_id,
+        article_name:    extractName(r.profiles),
+        client_name:     asgn.client_name,
+        work_type:       asgn.work_type,
+      }
     })
+    .filter((r): r is RawSessionRecord => r !== null)
+
+  const todayIST    = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' })
+  const sessionRows = deriveSessionReport(records, todayIST)
+
+  if (wantsJson) {
+    return NextResponse.json({ rows: sessionRows })
   }
-
-  // Derive sessions from distinct attendance dates using 7-day gap rule
-  const dateSet     = new Set(records.map(r => r.attendance_date))
-  const sortedDates = [...dateSet].sort()
-
-  const sessions: string[][] = []
-  let current = [sortedDates[0]]
-
-  for (let i = 1; i < sortedDates.length; i++) {
-    if (daysBetween(sortedDates[i - 1], sortedDates[i]) > 7) {
-      sessions.push(current)
-      current = [sortedDates[i]]
-    } else {
-      current.push(sortedDates[i])
-    }
-  }
-  sessions.push(current)
-
-  // Aggregate per session
-  const sessionRows: SessionReportRow[] = sessions.map((sessionDates, idx) => {
-    const sessionDateSet = new Set(sessionDates)
-    const sessionRecords = records.filter(r => sessionDateSet.has(r.attendance_date))
-
-    const articleMap = new Map<string, string>()
-    let totalHours = 0
-
-    for (const r of sessionRecords) {
-      if (!articleMap.has(r.article_id)) {
-        articleMap.set(r.article_id, extractName(r.profiles))
-      }
-      if (r.checked_out_at) {
-        totalHours +=
-          (new Date(r.checked_out_at).getTime() - new Date(r.checked_in_at).getTime()) /
-          3_600_000
-      }
-    }
-
-    const articleNames = [...articleMap.values()].filter(Boolean).sort()
-    const firstDate    = sessionDates[0]
-    const lastDate     = sessionDates[sessionDates.length - 1]
-    const status: 'Active' | 'Completed' =
-      daysBetween(lastDate, todayIST) <= 7 ? 'Active' : 'Completed'
-
-    return {
-      assignment_label: assignLabel,
-      client_name:      assignment.client_name,
-      work_type:        assignment.work_type,
-      session_number:   `S${idx + 1}`,
-      articles_count:   articleMap.size,
-      article_names:    articleNames.join(', '),
-      attendance_days:  sessionDates.length,
-      total_hours:      Math.round(totalHours * 10) / 10,
-      status,
-      first_date:       firstDate,
-      last_date:        lastDate,
-    }
-  })
 
   const buffer = await buildSessionReportExcel(sessionRows)
+  const safeClient = assignmentClientName
+    ? assignmentClientName.replace(/[^a-zA-Z0-9]+/g, '_')
+    : 'all_assignments'
+  const filename = `session_report_${safeClient}_${todayIST}.xlsx`
 
   return new NextResponse(new Uint8Array(buffer), {
     headers: {
