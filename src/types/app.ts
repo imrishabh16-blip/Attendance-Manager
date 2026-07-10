@@ -4,7 +4,6 @@ export type UserStatus = 'pending' | 'active' | 'deactivated'
 // The union was removed to support admin-defined custom work types.
 export type WorkType = string
 export type AssignmentStatus = 'active' | 'inactive'
-export type CycleStatus = 'active' | 'closed'
 export type AttendanceType = 'regular' | 'others' | 'unallocated'
 
 export interface Profile {
@@ -28,18 +27,6 @@ export interface Assignment {
   created_by: string
   created_at: string
   updated_at: string
-}
-
-export interface AssignmentCycle {
-  id: string
-  assignment_id: string
-  status: CycleStatus
-  started_at: string
-  started_by: string
-  ended_at: string | null
-  ended_by: string | null
-  notes: string | null
-  created_at: string
 }
 
 export interface AttendanceRecord {
@@ -76,16 +63,6 @@ export interface LeaveRecord {
   created_at: string
 }
 
-export interface InactivityAlert {
-  id: string
-  cycle_id: string
-  assignment_id: string
-  last_activity_date: string
-  days_inactive: number
-  dismissed: boolean
-  created_at: string
-}
-
 export interface DashboardSummary {
   active_articles_today: number
   on_leave_today: number
@@ -109,21 +86,6 @@ export interface OnLeaveArticleRow {
   article_id:   string
   article_name: string
 }
-
-// WORK_TYPES kept only for badge colour mapping in workTypeBadgeColor().
-// The UI dropdown now fetches from the work_types DB table instead.
-export const WORK_TYPES: string[] = [
-  'Internal Audit',
-  'Statutory Audit',
-  'Tax Audit',
-  'GST Compliance',
-  'GST Litigation',
-  'Income Tax Compliance',
-  'Income Tax Litigation',
-  'Others',
-]
-
-export const ELEVATED_ROLES: UserRole[] = ['admin', 'partner', 'manager']
 
 // Roles that behave exactly like Article: Attend page access, own-attendance
 // permissions, and inclusion in every Article-scoped dashboard/report query.
