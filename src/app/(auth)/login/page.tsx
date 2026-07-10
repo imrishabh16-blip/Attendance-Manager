@@ -4,7 +4,7 @@ import LoginClient from './LoginClient'
 
 export default async function LoginPage() {
   const supabase = await createClient()
-  const { data: { session } } = await supabase.auth.getSession()
-  if (session) redirect('/')
+  const { data: { user } } = await supabase.auth.getUser()
+  if (user) redirect('/')
   return <LoginClient />
 }

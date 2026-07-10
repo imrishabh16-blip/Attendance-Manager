@@ -1,30 +1,40 @@
 import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { NextRequest, NextResponse } from 'next/server'
+import { isArticleRole } from '@/types/app'
 
 export async function POST(req: NextRequest) {
   const supabase = await createClient()
-  const { data: { session } } = await supabase.auth.getSession()
-  if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
   const { data: profile } = await supabase
     .from('profiles')
-    .select('status')
-    .eq('id', session.user.id)
+    .select('status, role')
+    .eq('id', user.id)
     .single()
 
   if (!profile || profile.status !== 'active') {
     return NextResponse.json({ error: 'Account not active' }, { status: 403 })
   }
+  if (!isArticleRole(profile.role)) {
+    return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+  }
 
-  const { leave_date, note } = await req.json()
+  let body: { leave_date?: string; note?: string }
+  try {
+    body = await req.json()
+  } catch {
+    return NextResponse.json({ error: 'Invalid request body' }, { status: 400 })
+  }
+  const { leave_date, note } = body
   if (!leave_date) return NextResponse.json({ error: 'leave_date required' }, { status: 400 })
 
   // Block leave marking if attendance already exists for that date
   const { data: existingAttendance } = await supabase
     .from('attendance_records')
     .select('id')
-    .eq('article_id', session.user.id)
+    .eq('article_id', user.id)
     .eq('attendance_date', leave_date)
     .not('checked_in_at', 'is', null)
     .maybeSingle()
@@ -41,7 +51,7 @@ export async function POST(req: NextRequest) {
   const { data, error } = await admin
     .from('leave_records')
     .upsert(
-      { article_id: session.user.id, leave_date, note: note ?? null },
+      { article_id: user.id, leave_date, note: note ?? null },
       { onConflict: 'article_id,leave_date', ignoreDuplicates: false }
     )
     .select()
@@ -53,17 +63,36 @@ export async function POST(req: NextRequest) {
 
 export async function DELETE(req: NextRequest) {
   const supabase = await createClient()
-  const { data: { session } } = await supabase.auth.getSession()
-  if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
-  const { leave_date } = await req.json()
+  const { data: profile } = await supabase
+    .from('profiles')
+    .select('status, role')
+    .eq('id', user.id)
+    .single()
+
+  if (!profile || profile.status !== 'active') {
+    return NextResponse.json({ error: 'Account not active' }, { status: 403 })
+  }
+  if (!isArticleRole(profile.role)) {
+    return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+  }
+
+  let body: { leave_date?: string }
+  try {
+    body = await req.json()
+  } catch {
+    return NextResponse.json({ error: 'Invalid request body' }, { status: 400 })
+  }
+  const { leave_date } = body
   if (!leave_date) return NextResponse.json({ error: 'leave_date required' }, { status: 400 })
 
   const admin = createAdminClient()
   const { error } = await admin
     .from('leave_records')
     .delete()
-    .eq('article_id', session.user.id)
+    .eq('article_id', user.id)
     .eq('leave_date', leave_date)
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })

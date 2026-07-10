@@ -46,13 +46,13 @@ function fmtDuration(minutes: number): string {
 export async function GET() {
   const supabase = await createClient()
 
-  const { data: { session } } = await supabase.auth.getSession()
-  if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
   const { data: viewer } = await supabase
     .from('profiles')
     .select('role, status')
-    .eq('id', session.user.id)
+    .eq('id', user.id)
     .single()
 
   if (!viewer || viewer.status !== 'active' || !ALLOWED_ROLES.includes(viewer.role)) {

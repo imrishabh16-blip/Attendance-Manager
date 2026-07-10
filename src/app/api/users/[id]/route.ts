@@ -13,13 +13,13 @@ export async function PATCH(
   const { id } = await params
 
   const supabase = await createClient()
-  const { data: { session } } = await supabase.auth.getSession()
-  if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
   const { data: actor } = await supabase
     .from('profiles')
     .select('role, status')
-    .eq('id', session.user.id)
+    .eq('id', user.id)
     .single()
 
   if (!actor || actor.status !== 'active') {
@@ -29,8 +29,13 @@ export async function PATCH(
   const isAdmin   = actor.role === 'admin'
   const isPartner = actor.role === 'partner'
 
-  const body = await req.json()
-  const { action, role } = body as { action: string; role?: UserRole }
+  let body: { action: string; role?: UserRole }
+  try {
+    body = await req.json()
+  } catch {
+    return NextResponse.json({ error: 'Invalid request body' }, { status: 400 })
+  }
+  const { action, role } = body
 
   const admin = createAdminClient()
   let updatePayload: Record<string, unknown> = {}
@@ -43,7 +48,7 @@ export async function PATCH(
     }
     updatePayload = {
       status:      'active',
-      approved_by: session.user.id,
+      approved_by: user.id,
       approved_at: new Date().toISOString(),
       ...(role ? { role } : {}),
     }
@@ -71,7 +76,7 @@ export async function PATCH(
 
     updatePayload = {
       status:         'deactivated',
-      deactivated_by: session.user.id,
+      deactivated_by: user.id,
       deactivated_at: new Date().toISOString(),
     }
 
@@ -89,7 +94,7 @@ export async function PATCH(
       return NextResponse.json({ error: 'Invalid role' }, { status: 400 })
     }
     // Block self-role-change entirely — prevents accidental self-lockout
-    if (id === session.user.id) {
+    if (id === user.id) {
       return NextResponse.json({ error: 'Cannot change your own role' }, { status: 403 })
     }
     // Partners cannot elevate anyone to admin
@@ -129,7 +134,7 @@ export async function PATCH(
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
 
   await admin.from('audit_log').insert({
-    actor_id:    session.user.id,
+    actor_id:    user.id,
     action:      `user.${action}`,
     target_type: 'profiles',
     target_id:   id,

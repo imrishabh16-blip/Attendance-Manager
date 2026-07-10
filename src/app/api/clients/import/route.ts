@@ -22,6 +22,8 @@ export async function GET() {
   })
 }
 
+const MAX_IMPORT_FILE_SIZE = 2 * 1024 * 1024 // 2 MB — a client-name list never legitimately exceeds this
+
 // ── POST /api/clients/import ─────────────────────────────────────────────────
 // Accepts multipart/form-data with a single "file" field (.csv or .xlsx).
 // Parses the file, trims whitespace, drops blank rows, and deduplicates within
@@ -31,15 +33,15 @@ export async function GET() {
 export async function POST(request: NextRequest) {
   // Auth — must be an active admin, partner, or manager
   const supabase = await createClient()
-  const { data: { session } } = await supabase.auth.getSession()
-  if (!session) {
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
 
   const { data: profile } = await supabase
     .from('profiles')
     .select('role, status')
-    .eq('id', session.user.id)
+    .eq('id', user.id)
     .single()
 
   if (!profile || profile.status !== 'active') {
@@ -60,6 +62,13 @@ export async function POST(request: NextRequest) {
   const file = formData.get('file')
   if (!(file instanceof File)) {
     return NextResponse.json({ error: 'No file provided' }, { status: 400 })
+  }
+
+  if (file.size > MAX_IMPORT_FILE_SIZE) {
+    return NextResponse.json(
+      { error: 'File is too large. Please upload a file under 2 MB.' },
+      { status: 400 }
+    )
   }
 
   const ext = file.name.split('.').pop()?.toLowerCase() ?? ''

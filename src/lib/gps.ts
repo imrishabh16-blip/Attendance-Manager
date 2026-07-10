@@ -78,6 +78,19 @@ export function buildMapsLink(lat: number, lng: number): string {
   return `https://maps.google.com/?q=${lat},${lng}`
 }
 
+// Server-side guard for check-in/check-out request bodies. The browser's
+// requestGPS() above always produces finite coordinates within real-world
+// bounds, so this never rejects a legitimate client-sent payload — it only
+// catches malformed/forged/non-numeric values (strings, NaN, Infinity,
+// out-of-range numbers) that a hand-crafted request could otherwise smuggle
+// straight into attendance_records.
+export function isValidCoordinate(latitude: unknown, longitude: unknown): boolean {
+  return (
+    typeof latitude === 'number' && Number.isFinite(latitude) && latitude >= -90 && latitude <= 90 &&
+    typeof longitude === 'number' && Number.isFinite(longitude) && longitude >= -180 && longitude <= 180
+  )
+}
+
 export function gpsErrorMessage(error: string): string {
   const messages: Record<string, string> = {
     denied:        'Location access was denied. Please enable location in your browser settings to check in.',

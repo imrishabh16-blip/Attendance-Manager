@@ -2,16 +2,17 @@ import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { NextRequest, NextResponse } from 'next/server'
 import { isArticleRole, type WorkType } from '@/types/app'
+import { isValidCoordinate } from '@/lib/gps'
 
 export async function POST(req: NextRequest) {
   const supabase = await createClient()
-  const { data: { session } } = await supabase.auth.getSession()
-  if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
   const { data: profile } = await supabase
     .from('profiles')
     .select('status, role')
-    .eq('id', session.user.id)
+    .eq('id', user.id)
     .single()
 
   if (!profile || profile.status !== 'active') {
@@ -21,14 +22,19 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   }
 
-  const body = await req.json()
+  let body: Record<string, unknown>
+  try {
+    body = await req.json()
+  } catch {
+    return NextResponse.json({ error: 'Invalid request body' }, { status: 400 })
+  }
   const { client_name, work_type, latitude, longitude, attendance_type, note } = body
 
   // --- Input validation ---
-  if (latitude == null || longitude == null) {
+  if (!isValidCoordinate(latitude, longitude)) {
     return NextResponse.json({ error: 'GPS coordinates are required' }, { status: 400 })
   }
-  if (!attendance_type || !['regular', 'unallocated'].includes(attendance_type)) {
+  if (!attendance_type || !['regular', 'unallocated'].includes(attendance_type as string)) {
     return NextResponse.json({ error: 'Invalid attendance type' }, { status: 400 })
   }
   if (attendance_type === 'regular' && (!client_name || !work_type)) {
@@ -45,7 +51,7 @@ export async function POST(req: NextRequest) {
   const { data: openRecord } = await supabase
     .from('attendance_records')
     .select('id, attendance_date')
-    .eq('article_id', session.user.id)
+    .eq('article_id', user.id)
     .is('checked_out_at', null)
     .not('checked_in_at', 'is', null)
     .maybeSingle()
@@ -76,7 +82,7 @@ export async function POST(req: NextRequest) {
   const { data: leaveRecord } = await supabase
     .from('leave_records')
     .select('id')
-    .eq('article_id', session.user.id)
+    .eq('article_id', user.id)
     .eq('leave_date', today)
     .maybeSingle()
 
@@ -91,7 +97,14 @@ export async function POST(req: NextRequest) {
   let resolvedAssignmentId: string | null = null
 
   if (attendance_type === 'regular') {
-    // 1. Find existing active assignment for this client + work-type combo
+    // 1. Find existing active assignment for this client + work-type combo.
+    //    Deliberately checked BEFORE any master-data validation: assignments
+    //    are free-text (no FK to clients/work_types), so an assignment that
+    //    already exists must always be resolved on its own history, even if
+    //    its client or work type has since been renamed/removed from the
+    //    master lists — otherwise a routine master-data cleanup (or a
+    //    stale client-side cache of the dropdown) would wrongly break
+    //    check-ins for an assignment articles are actively working under.
     const { data: existing } = await supabase
       .from('assignments')
       .select('id')
@@ -119,13 +132,31 @@ export async function POST(req: NextRequest) {
         )
       }
 
-      // 3. Auto-create a new assignment (service role bypasses RLS)
+      // 3. No assignment exists yet — validate against master data before
+      //    fabricating a brand-new one. The check-in UI (ClientWorkSelector)
+      //    only ever offers values already present in these two tables, so a
+      //    legitimate request always passes this; it only rejects a
+      //    forged/stale client_name or work_type that doesn't exist anywhere,
+      //    which previously would have silently auto-created a brand-new
+      //    assignment from unvalidated input.
+      const [{ data: clientMatch }, { data: workTypeMatch }] = await Promise.all([
+        supabase.from('clients').select('id').eq('name', client_name as string).maybeSingle(),
+        supabase.from('work_types').select('id').eq('name', work_type as string).maybeSingle(),
+      ])
+      if (!clientMatch) {
+        return NextResponse.json({ error: 'Unknown client. Ask your admin to add it.' }, { status: 400 })
+      }
+      if (!workTypeMatch) {
+        return NextResponse.json({ error: 'Unknown work type. Ask your admin to add it.' }, { status: 400 })
+      }
+
+      // 4. Auto-create a new assignment (service role bypasses RLS)
       const { data: created, error: createError } = await admin
         .from('assignments')
         .insert({
           client_name: client_name as string,
           work_type:   work_type as WorkType,
-          created_by:  session.user.id,
+          created_by:  user.id,
           status:      'active',
         })
         .select('id')
@@ -156,7 +187,7 @@ export async function POST(req: NextRequest) {
   const { data, error } = await admin
     .from('attendance_records')
     .insert({
-      article_id:         session.user.id,
+      article_id:         user.id,
       assignment_id:      resolvedAssignmentId,
       attendance_date:    today,
       checked_in_at:      new Date().toISOString(),

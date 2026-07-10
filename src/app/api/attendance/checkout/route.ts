@@ -2,16 +2,17 @@ import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { NextRequest, NextResponse } from 'next/server'
 import { isArticleRole } from '@/types/app'
+import { isValidCoordinate } from '@/lib/gps'
 
 export async function POST(req: NextRequest) {
   const supabase = await createClient()
-  const { data: { session } } = await supabase.auth.getSession()
-  if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
   const { data: profile } = await supabase
     .from('profiles')
     .select('status, role')
-    .eq('id', session.user.id)
+    .eq('id', user.id)
     .single()
 
   if (!profile || profile.status !== 'active') {
@@ -21,11 +22,16 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   }
 
-  const body = await req.json()
+  let body: Record<string, unknown>
+  try {
+    body = await req.json()
+  } catch {
+    return NextResponse.json({ error: 'Invalid request body' }, { status: 400 })
+  }
   const { record_id, latitude, longitude, note } = body
 
   if (!record_id) return NextResponse.json({ error: 'record_id required' }, { status: 400 })
-  if (latitude == null || longitude == null) {
+  if (!isValidCoordinate(latitude, longitude)) {
     return NextResponse.json({ error: 'GPS coordinates are required for checkout' }, { status: 400 })
   }
 
@@ -35,11 +41,11 @@ export async function POST(req: NextRequest) {
   const { data: record } = await admin
     .from('attendance_records')
     .select('id, article_id, checked_out_at')
-    .eq('id', record_id)
+    .eq('id', record_id as string)
     .single()
 
   if (!record) return NextResponse.json({ error: 'Record not found' }, { status: 404 })
-  if (record.article_id !== session.user.id) {
+  if (record.article_id !== user.id) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   }
   if (record.checked_out_at) {
@@ -54,7 +60,7 @@ export async function POST(req: NextRequest) {
       checked_out_lng: longitude,
       note:            note ?? undefined,
     })
-    .eq('id', record_id)
+    .eq('id', record_id as string)
     .is('checked_out_at', null)
     .select()
     .maybeSingle()

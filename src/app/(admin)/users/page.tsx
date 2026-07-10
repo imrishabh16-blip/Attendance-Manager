@@ -5,13 +5,13 @@ import type { UserRole } from '@/types/app'
 
 export default async function UsersPage() {
   const supabase = await createClient()
-  const { data: { session } } = await supabase.auth.getSession()
-  if (!session) redirect('/login')
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) redirect('/login')
 
   const { data: profile } = await supabase
     .from('profiles')
     .select('role, status')
-    .eq('id', session.user.id)
+    .eq('id', user.id)
     .single()
 
   if (!profile || profile.status !== 'active') redirect('/awaiting')
@@ -26,7 +26,7 @@ export default async function UsersPage() {
   return (
     <UsersClient
       users={users ?? []}
-      currentUserId={session.user.id}
+      currentUserId={user.id}
       currentUserRole={profile.role as UserRole}
     />
   )
