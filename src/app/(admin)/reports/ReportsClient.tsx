@@ -1,13 +1,15 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, Fragment } from 'react'
 import { Button } from '@/components/ui/Button'
 import { Card, CardHeader, CardBody } from '@/components/ui/Card'
 import { Modal } from '@/components/ui/Modal'
 import { Table, Thead, Tbody, Th, Td } from '@/components/ui/Table'
 import toast from 'react-hot-toast'
-import { Download, FileSpreadsheet, Eye } from 'lucide-react'
+import { Download, FileSpreadsheet, Eye, Users, ChevronDown } from 'lucide-react'
+import { cn, workTypeBadgeColor } from '@/lib/utils'
 import type { SessionReportRow } from '@/lib/export'
+import type { ReportingWiseManager } from '@/app/api/reports/reporting-wise/route'
 
 interface Props {
   articles:    { id: string; full_name: string }[]
@@ -30,6 +32,12 @@ export default function ReportsClient({ articles, assignments }: Props) {
   const [previewOpen, setPreviewOpen]       = useState(false)
   const [previewLoading, setPreviewLoading] = useState(false)
   const [previewRows, setPreviewRows]       = useState<SessionReportRow[]>([])
+
+  // ── Reporting Wise Articles ──────────────────────────────────────────────
+  const [reportingWiseOpen, setReportingWiseOpen]       = useState(false)
+  const [reportingWiseLoading, setReportingWiseLoading] = useState(false)
+  const [reportingWiseData, setReportingWiseData]       = useState<ReportingWiseManager[]>([])
+  const [expandedManagerId, setExpandedManagerId]       = useState<string | null>(null)
 
   async function downloadAttendance() {
     if (!startDate || !endDate) { toast.error('Select date range'); return }
@@ -88,6 +96,22 @@ export default function ReportsClient({ articles, assignments }: Props) {
     const { rows } = await res.json() as { rows: SessionReportRow[] }
     setPreviewRows(rows)
     setPreviewLoading(false)
+  }
+
+  async function openReportingWise() {
+    setReportingWiseOpen(true)
+    setReportingWiseLoading(true)
+    setExpandedManagerId(null)
+    const res = await fetch('/api/reports/reporting-wise')
+    if (!res.ok) {
+      toast.error('Failed to load Reporting Wise Articles')
+      setReportingWiseOpen(false)
+      setReportingWiseLoading(false)
+      return
+    }
+    const { managers } = await res.json() as { managers: ReportingWiseManager[] }
+    setReportingWiseData(managers)
+    setReportingWiseLoading(false)
   }
 
   // Derived from previewRows — no additional query. For a single assignment
@@ -211,6 +235,28 @@ export default function ReportsClient({ articles, assignments }: Props) {
             </div>
           </CardBody>
         </Card>
+
+        {/* Reporting Wise Articles */}
+        <Card>
+          <CardHeader>
+            <div className="flex items-center gap-2">
+              <Users className="h-4 w-4 text-purple-600" />
+              <h2 className="text-sm font-semibold text-gray-900">Reporting Wise Articles</h2>
+            </div>
+          </CardHeader>
+          <CardBody>
+            <div className="flex flex-col gap-3">
+              <p className="text-xs text-gray-400">
+                Active Articles/Interns grouped by Reporting Manager, with a live view of what
+                each is currently working on.
+              </p>
+              <Button onClick={openReportingWise} loading={reportingWiseLoading} className="w-full sm:w-auto">
+                <Eye className="h-4 w-4" />
+                View Reporting Wise Articles
+              </Button>
+            </div>
+          </CardBody>
+        </Card>
       </div>
 
       {/* Session Report preview */}
@@ -281,6 +327,103 @@ export default function ReportsClient({ articles, assignments }: Props) {
                   </tr>
                 ))}
               </Tbody>
+            </Table>
+          </>
+        )}
+      </Modal>
+
+      {/* Reporting Wise Articles */}
+      <Modal
+        open={reportingWiseOpen}
+        onClose={() => setReportingWiseOpen(false)}
+        title="Reporting Wise Articles"
+        className="sm:max-w-3xl"
+      >
+        {reportingWiseLoading ? (
+          <div className="space-y-2">
+            {[0, 1, 2].map(i => (
+              <div key={i} className="h-12 bg-brand-100 rounded-xl animate-pulse" />
+            ))}
+          </div>
+        ) : reportingWiseData.length === 0 ? (
+          <p className="text-sm text-gray-400 text-center py-8">
+            No Reporting Managers with currently active Articles/Interns
+          </p>
+        ) : (
+          <>
+            <p className="text-xs text-gray-400 mb-3">
+              Articles counts every active Article/Intern reporting to that manager. Expanding a row
+              shows only who's currently checked in and what they're working on.
+            </p>
+            <Table>
+              <Thead>
+                <tr>
+                  <Th>Reporting Manager</Th>
+                  <Th>Articles</Th>
+                </tr>
+              </Thead>
+            <Tbody>
+              {reportingWiseData.map(m => {
+                const expanded = expandedManagerId === m.reporting_manager_id
+                return (
+                  <Fragment key={m.reporting_manager_id}>
+                    <tr
+                      className="hover:bg-brand-50 cursor-pointer"
+                      onClick={() => setExpandedManagerId(expanded ? null : m.reporting_manager_id)}
+                    >
+                      <Td>
+                        <div className="flex items-center gap-2">
+                          <ChevronDown
+                            className={cn(
+                              'h-3.5 w-3.5 text-gray-400 transition-transform flex-shrink-0',
+                              expanded && 'rotate-180'
+                            )}
+                          />
+                          <span className="font-medium text-gray-900">{m.full_name}</span>
+                        </div>
+                      </Td>
+                      <Td>
+                        <span className="font-semibold text-gray-900">{m.active_count}</span>
+                      </Td>
+                    </tr>
+                    {expanded && (
+                      <tr>
+                        <td colSpan={2} className="px-4 py-3 bg-brand-50">
+                          {m.live_groups.length === 0 ? (
+                            <p className="text-xs text-gray-400 py-1">
+                              No reports currently checked in.
+                            </p>
+                          ) : (
+                            <div className="flex flex-col gap-3">
+                              {m.live_groups.map(g => (
+                                <div key={g.assignment_id ?? 'others'}>
+                                  <div className="flex items-center gap-2 mb-1">
+                                    <span className="text-xs font-semibold text-gray-700">{g.label}</span>
+                                    {g.work_type && (
+                                      <span className={cn(
+                                        'text-xs font-medium px-1.5 py-0.5 rounded-full',
+                                        workTypeBadgeColor(g.work_type)
+                                      )}>
+                                        {g.work_type}
+                                      </span>
+                                    )}
+                                  </div>
+                                  <ul className="pl-4 list-disc text-sm text-gray-700 space-y-0.5">
+                                    {g.articles.map(a => (
+                                      <li key={a.article_id}>{a.full_name}</li>
+                                    ))}
+                                  </ul>
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                        </td>
+                      </tr>
+                    )}
+                  </Fragment>
+                )
+              })}
+            </Tbody>
             </Table>
           </>
         )}
