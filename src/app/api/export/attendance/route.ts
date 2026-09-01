@@ -1,4 +1,5 @@
 import { createClient } from '@/lib/supabase/server'
+import { createAdminClient } from '@/lib/supabase/admin'
 import { buildAttendanceExcel } from '@/lib/export'
 import type { AttendanceExportRow } from '@/lib/export'
 import { NextRequest, NextResponse } from 'next/server'
@@ -39,6 +40,95 @@ async function fetchAllPages<T>(
     if (page.length < PAGE_SIZE) return { data: rows, error: null }
     from += PAGE_SIZE
   }
+}
+
+type RosterEventRow = {
+  target_id:  string
+  action:     string
+  payload:    unknown
+  created_at: string
+}
+
+function toISTDate(iso: string): string {
+  return new Date(iso).toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' })
+}
+
+type RosterState = { status: string; role: string }
+
+// Starting state mirrors the signup trigger's default (pending article).
+const INITIAL_ROSTER_STATE: RosterState = { status: 'pending', role: 'article' }
+
+// Applies one lifecycle event's payload to a roster state. Shared by
+// isEligibleAsOf and eligibilityChangedOnDate so both replay the exact same
+// state-transition rules.
+function applyRosterEvent(state: RosterState, ev: RosterEventRow): RosterState {
+  const payload = ev.payload as { status?: string; role?: string } | null
+  let { status, role } = state
+
+  if (ev.action === 'user.change_role') {
+    if (payload?.role) role = payload.role
+  } else {
+    // user.approve | user.deactivate | user.reactivate
+    if (payload?.status) status = payload.status
+    if (ev.action === 'user.approve' && payload?.role) role = payload.role
+  }
+
+  return { status, role }
+}
+
+function isRosterEligible(state: RosterState): boolean {
+  return state.status === 'active' && (ARTICLE_ROLES as readonly string[]).includes(state.role)
+}
+
+// Replays a person's approve/deactivate/reactivate/change_role history
+// (events pre-sorted ascending by created_at) to determine whether they were
+// an active article/intern as of IST date `dateIST` — instead of trusting
+// their CURRENT profiles.role/status, which has no history of its own and
+// silently erases past eligibility after a later promotion or deactivation.
+// A person with no event on or before dateIST has never been approved as of
+// that date and is never eligible — this also means a person with NO
+// history at all (an audit_log gap) is conservatively excluded rather than
+// assumed eligible.
+function isEligibleAsOf(events: RosterEventRow[], dateIST: string): boolean {
+  let state    = INITIAL_ROSTER_STATE
+  let sawEvent = false
+
+  for (const ev of events) {
+    if (toISTDate(ev.created_at) > dateIST) break
+    sawEvent = true
+    state = applyRosterEvent(state, ev)
+  }
+
+  if (!sawEvent) return false
+  return isRosterEligible(state)
+}
+
+// True if this person's AWOL-roster eligibility (active article/intern, or
+// not) flips at any point during dateIST — e.g. approved, deactivated,
+// reactivated, or promoted/demoted across the article/intern boundary that
+// same day. Collapsing an exact-timestamp transition onto a whole calendar
+// day can't faithfully represent a partial-day eligibility window, so dates
+// where it changed mid-day are skipped for synthetic rows entirely rather
+// than guessed at. An article<->intern change_role never flips the boolean
+// (both are in ARTICLE_ROLES), so it never triggers exclusion here — that
+// falls out of comparing the actual eligibility predicate before/after each
+// event, not from special-casing role values.
+function eligibilityChangedOnDate(events: RosterEventRow[], dateIST: string): boolean {
+  let state = INITIAL_ROSTER_STATE
+
+  for (const ev of events) {
+    const evDate = toISTDate(ev.created_at)
+    if (evDate > dateIST) break
+    if (evDate < dateIST) {
+      state = applyRosterEvent(state, ev)
+      continue
+    }
+    const before = isRosterEligible(state)
+    state = applyRosterEvent(state, ev)
+    if (isRosterEligible(state) !== before) return true
+  }
+
+  return false
 }
 
 function generateDateRange(start: string, end: string): string[] {
@@ -120,12 +210,17 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: 'Date range cannot exceed 365 days' }, { status: 400 })
   }
 
+  // IST end-of-range boundary — audit events after this can never affect
+  // eligibility for any date in the requested range.
+  const endOfRangeIST = new Date(`${endDate}T23:59:59.999+05:30`).toISOString()
+  const admin = createAdminClient()
+
   // Parallel across the 4 distinct queries (unchanged concurrency shape) —
   // each one now pages internally via fetchAllPages so none of them can be
   // silently truncated by the PostgREST row cap. This is bounded, sequential
   // pagination per query (ceil(rowCount / PAGE_SIZE) requests), not N+1 —
   // there is no per-row query multiplication.
-  const [exportRes, articlesRes, leaveRes, attendedRes] = await Promise.all([
+  const [exportRes, auditRes, leaveRes, attendedRes] = await Promise.all([
     // get_attendance_export already has a deterministic ORDER BY baked into
     // its own SQL (attendance_date, full_name, checked_in_at) — see
     // supabase/migrations/00008_stabilization.sql — so no extra .order() is
@@ -137,12 +232,28 @@ export async function GET(req: NextRequest) {
         p_article_id: articleId ?? null,
       }).range(from, to)
     ),
-    fetchAllPages<{ id: string; full_name: string }>((from, to) =>
-      (articleId
-        ? supabase.from('profiles').select('id, full_name').eq('id', articleId).in('role', ARTICLE_ROLES).eq('status', 'active').order('id').range(from, to)
-        : supabase.from('profiles').select('id, full_name').in('role', ARTICLE_ROLES).eq('status', 'active').order('full_name').order('id').range(from, to)
-      )
-    ),
+    // Full profile lifecycle history (bounded to events up to the end of the
+    // requested range — later admin actions can't affect past eligibility).
+    // Read via the service-role client: audit_log's RLS policy only allows
+    // role='admin' to SELECT it directly, but this report is also permitted
+    // for partner/manager — the session client would silently return zero
+    // rows (RLS filters, it doesn't error) for those two roles.
+    fetchAllPages<RosterEventRow>((from, to) => {
+      let query = admin
+        .from('audit_log')
+        .select('target_id, action, payload, created_at')
+        .eq('target_type', 'profiles')
+        .in('action', ['user.approve', 'user.deactivate', 'user.reactivate', 'user.change_role'])
+        .lte('created_at', endOfRangeIST)
+        .order('created_at', { ascending: true })
+        .order('id', { ascending: true })
+
+      if (articleId) {
+        query = query.eq('target_id', articleId)
+      }
+
+      return query.range(from, to)
+    }),
     fetchAllPages<{ article_id: string; leave_date: string }>((from, to) =>
       (articleId
         ? supabase.from('leave_records').select('article_id, leave_date').gte('leave_date', startDate).lte('leave_date', endDate).eq('article_id', articleId).order('article_id').order('leave_date').range(from, to)
@@ -158,11 +269,33 @@ export async function GET(req: NextRequest) {
   ])
 
   if (exportRes.error)   return NextResponse.json({ error: exportRes.error.message },   { status: 500 })
-  if (articlesRes.error) return NextResponse.json({ error: articlesRes.error.message }, { status: 500 })
+  if (auditRes.error)    return NextResponse.json({ error: auditRes.error.message },    { status: 500 })
   if (leaveRes.error)    return NextResponse.json({ error: leaveRes.error.message },    { status: 500 })
   if (attendedRes.error) return NextResponse.json({ error: attendedRes.error.message }, { status: 500 })
 
-  const articles = articlesRes.data ?? []
+  // Group each candidate's lifecycle events (already ascending by created_at
+  // from the query's own ORDER BY — no re-sort needed).
+  const eventsByPerson = new Map<string, RosterEventRow[]>()
+  for (const ev of auditRes.data) {
+    const list = eventsByPerson.get(ev.target_id) ?? []
+    list.push(ev)
+    eventsByPerson.set(ev.target_id, list)
+  }
+  const candidateIds = [...eventsByPerson.keys()]
+
+  // Names for the roster — a separate lookup because audit_log doesn't store
+  // full_name. Bounded by total people ever administered, not attendance
+  // volume, but still paginated defensively for consistency with every other
+  // query in this route.
+  const { data: nameRows, error: nameError } = candidateIds.length > 0
+    ? await fetchAllPages<{ id: string; full_name: string }>((from, to) =>
+        supabase.from('profiles').select('id, full_name').in('id', candidateIds).range(from, to)
+      )
+    : { data: [] as { id: string; full_name: string }[], error: null }
+
+  if (nameError) return NextResponse.json({ error: nameError.message }, { status: 500 })
+  const nameById = new Map(nameRows.map(p => [p.id, p.full_name]))
+
   const leaveSet = new Set(
     (leaveRes.data ?? []).map((l: { article_id: string; leave_date: string }) => `${l.article_id}:${l.leave_date}`)
   )
@@ -176,16 +309,25 @@ export async function GET(req: NextRequest) {
     status: computeStatus(row.attendance_type_label, row.duration_hours),
   }))
 
-  // Generate synthetic On Leave and AWOL rows for dates with no attendance
+  // Generate synthetic On Leave and AWOL rows for dates with no attendance.
+  // Order matters: real attendance wins first, then dates whose eligibility
+  // actually changed mid-day are skipped entirely (a whole-day AWOL/Leave
+  // label can't faithfully represent a partial-day transition), then the
+  // remaining candidates are evaluated for historical eligibility as of that
+  // date, and only then does the existing Leave/AWOL distinction apply.
   const syntheticRows: AttendanceExportRow[] = []
   const dateRange = generateDateRange(startDate, endDate)
 
   for (const date of dateRange) {
-    for (const article of articles) {
-      const key = `${article.id}:${date}`
+    for (const personId of candidateIds) {
+      const key = `${personId}:${date}`
       if (attendedSet.has(key)) continue
+      const events = eventsByPerson.get(personId) ?? []
+      if (eligibilityChangedOnDate(events, date)) continue
+      if (!isEligibleAsOf(events, date)) continue
+      const name = nameById.get(personId) ?? '—'
       syntheticRows.push(
-        makeSyntheticRow(article.full_name, date, leaveSet.has(key) ? 'On Leave' : 'AWOL')
+        makeSyntheticRow(name, date, leaveSet.has(key) ? 'On Leave' : 'AWOL')
       )
     }
   }
