@@ -69,13 +69,20 @@ export async function POST(req: NextRequest) {
       )
     }
     // Stale record from a previous day — auto-close at 23:59:59 IST and continue
-    await admin
+    const { error: autoCloseError } = await admin
       .from('attendance_records')
       .update({
         checked_out_at: new Date(`${openRecord.attendance_date}T23:59:59+05:30`).toISOString(),
         note:           'Auto-closed: check-out not recorded',
       })
       .eq('id', openRecord.id)
+
+    if (autoCloseError) {
+      return NextResponse.json(
+        { error: 'Could not automatically close your previous session. Please contact an administrator.' },
+        { status: 500 }
+      )
+    }
   }
 
   // --- Block check-in if leave is already marked for today ---

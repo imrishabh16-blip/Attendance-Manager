@@ -1,9 +1,37 @@
 import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { NextRequest, NextResponse } from 'next/server'
-import type { UserRole } from '@/types/app'
+import { isArticleRole, type UserRole } from '@/types/app'
 
 const VALID_ROLES: UserRole[] = ['article', 'intern', 'manager', 'partner', 'admin']
+
+// Closes the target's open attendance session (if any) before an admin
+// action removes their ability to check themselves out. Returns the update
+// error (or null if there was nothing to close / it succeeded), so the
+// caller can abort the profile change on failure instead of leaving an
+// inconsistent state.
+async function closeOpenSession(
+  admin: ReturnType<typeof createAdminClient>,
+  articleId: string,
+  closedAt: string,
+  note: string
+) {
+  const { data: openRecord } = await admin
+    .from('attendance_records')
+    .select('id')
+    .eq('article_id', articleId)
+    .is('checked_out_at', null)
+    .maybeSingle()
+
+  if (!openRecord) return null
+
+  const { error } = await admin
+    .from('attendance_records')
+    .update({ checked_out_at: closedAt, note })
+    .eq('id', openRecord.id)
+
+  return error
+}
 
 // PATCH /api/users/[id] — approve | deactivate | reactivate | change_role
 export async function PATCH(
@@ -74,10 +102,22 @@ export async function PATCH(
       }
     }
 
+    const now = new Date().toISOString()
+
+    // Deactivation revokes portal access, so an article/intern with an open
+    // session can no longer check themselves out. Close it first — if this
+    // fails, abort before the profile is touched (see ordering note below).
+    if (target && isArticleRole(target.role as UserRole)) {
+      const closeError = await closeOpenSession(admin, id, now, 'Auto-closed: user deactivated')
+      if (closeError) {
+        return NextResponse.json({ error: closeError.message }, { status: 500 })
+      }
+    }
+
     updatePayload = {
       status:         'deactivated',
       deactivated_by: user.id,
-      deactivated_at: new Date().toISOString(),
+      deactivated_at: now,
     }
 
   // ── reactivate ─────────────────────────────────────────────────────────
@@ -115,6 +155,16 @@ export async function PATCH(
           { error: 'Cannot demote the last admin account' },
           { status: 403 }
         )
+      }
+    }
+
+    // Auto-close an open session only when moving OUT of an attendance-
+    // capable role — never between article and intern, since checkout
+    // access is unaffected by that transition.
+    if (target && isArticleRole(target.role as UserRole) && !isArticleRole(role)) {
+      const closeError = await closeOpenSession(admin, id, new Date().toISOString(), 'Auto-closed: role changed')
+      if (closeError) {
+        return NextResponse.json({ error: closeError.message }, { status: 500 })
       }
     }
 

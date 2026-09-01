@@ -101,10 +101,49 @@ export default function AssignmentsClient({
     if (!form.client_name.trim()) { toast.error('Client name required'); return }
     if (!form.work_type)          { toast.error('Work type required'); return }
     setSaving(true)
+
+    const clientName = form.client_name.trim()
+    const workType    = form.work_type
+
+    // Same duplicate check the check-in auto-create path uses (see
+    // checkin/route.ts): an existing active match must be reused, not
+    // duplicated, and an existing inactive match must block creation rather
+    // than silently forking the engagement's history across two assignment
+    // IDs. Errors are surfaced, never treated as "no duplicate found".
+    const { data: existingActive, error: activeError } = await supabase
+      .from('assignments')
+      .select('id')
+      .eq('client_name', clientName)
+      .eq('work_type', workType)
+      .eq('status', 'active')
+      .maybeSingle()
+
+    if (activeError) { toast.error(activeError.message); setSaving(false); return }
+    if (existingActive) {
+      toast.error(`${clientName} (${workType}) already has an active assignment.`)
+      setSaving(false)
+      return
+    }
+
+    const { data: existingInactive, error: inactiveError } = await supabase
+      .from('assignments')
+      .select('id')
+      .eq('client_name', clientName)
+      .eq('work_type', workType)
+      .eq('status', 'inactive')
+      .maybeSingle()
+
+    if (inactiveError) { toast.error(inactiveError.message); setSaving(false); return }
+    if (existingInactive) {
+      toast.error(`${clientName} (${workType}) already exists but is inactive. Reactivate it instead of creating a new one.`)
+      setSaving(false)
+      return
+    }
+
     const { data: profile } = await supabase.from('profiles').select('id').single()
     const { data, error } = await supabase
       .from('assignments')
-      .insert({ client_name: form.client_name.trim(), work_type: form.work_type, notes: form.notes.trim() || null, created_by: profile?.id })
+      .insert({ client_name: clientName, work_type: workType, notes: form.notes.trim() || null, created_by: profile?.id })
       .select().single()
     if (error) { toast.error(error.message); setSaving(false); return }
     setAssignments(prev => [...prev, data as Assignment])
