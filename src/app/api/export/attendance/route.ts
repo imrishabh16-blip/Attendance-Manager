@@ -3,8 +3,43 @@ import { buildAttendanceExcel } from '@/lib/export'
 import type { AttendanceExportRow } from '@/lib/export'
 import { NextRequest, NextResponse } from 'next/server'
 import { ARTICLE_ROLES } from '@/types/app'
+import type { PostgrestError } from '@supabase/supabase-js'
 
 const ALLOWED_ROLES = ['admin', 'partner', 'manager']
+
+// Supabase/PostgREST caps any single response at this many rows (the
+// project's default Max Rows setting). This firm's attendance volume already
+// exceeds it for a single month (1,087 real rows confirmed for August 2026
+// across 60 active articles/interns), so every query below that scales with
+// firm size or date-range length must page through the full result instead
+// of trusting one response — otherwise rows past the cutoff are silently
+// dropped with no error, which is exactly what caused real attendance to be
+// misreported as AWOL.
+const PAGE_SIZE = 1000
+
+// Fetches every row of a query in PAGE_SIZE batches via .range(), regardless
+// of how many rows exist in total. Terminates only when a page comes back
+// shorter than PAGE_SIZE (the true end of the result set) or a page errors —
+// it can never silently stop at exactly PAGE_SIZE rows while more remain,
+// because a full page always triggers one more request.
+//
+// Requires the underlying query to have a deterministic ORDER BY: Postgrest
+// pagination is only guaranteed stable (no duplicate or skipped rows across
+// page boundaries) when row order doesn't change between requests.
+async function fetchAllPages<T>(
+  buildPage: (from: number, to: number) => PromiseLike<{ data: T[] | null; error: PostgrestError | null }>
+): Promise<{ data: T[]; error: PostgrestError | null }> {
+  const rows: T[] = []
+  let from = 0
+  while (true) {
+    const { data, error } = await buildPage(from, from + PAGE_SIZE - 1)
+    if (error) return { data: rows, error }
+    const page = data ?? []
+    rows.push(...page)
+    if (page.length < PAGE_SIZE) return { data: rows, error: null }
+    from += PAGE_SIZE
+  }
+}
 
 function generateDateRange(start: string, end: string): string[] {
   const dates: string[] = []
@@ -85,24 +120,40 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: 'Date range cannot exceed 365 days' }, { status: 400 })
   }
 
-  // Parallel: rich session rows, active articles, leave records, attended (article_id, date) pairs
+  // Parallel across the 4 distinct queries (unchanged concurrency shape) —
+  // each one now pages internally via fetchAllPages so none of them can be
+  // silently truncated by the PostgREST row cap. This is bounded, sequential
+  // pagination per query (ceil(rowCount / PAGE_SIZE) requests), not N+1 —
+  // there is no per-row query multiplication.
   const [exportRes, articlesRes, leaveRes, attendedRes] = await Promise.all([
-    supabase.rpc('get_attendance_export', {
-      p_start_date: startDate,
-      p_end_date:   endDate,
-      p_article_id: articleId ?? null,
-    }),
-    (articleId
-      ? supabase.from('profiles').select('id, full_name').eq('id', articleId).in('role', ARTICLE_ROLES).eq('status', 'active')
-      : supabase.from('profiles').select('id, full_name').in('role', ARTICLE_ROLES).eq('status', 'active').order('full_name')
+    // get_attendance_export already has a deterministic ORDER BY baked into
+    // its own SQL (attendance_date, full_name, checked_in_at) — see
+    // supabase/migrations/00008_stabilization.sql — so no extra .order() is
+    // needed here to make pagination stable.
+    fetchAllPages<Omit<AttendanceExportRow, 'status'>>((from, to) =>
+      supabase.rpc('get_attendance_export', {
+        p_start_date: startDate,
+        p_end_date:   endDate,
+        p_article_id: articleId ?? null,
+      }).range(from, to)
     ),
-    (articleId
-      ? supabase.from('leave_records').select('article_id, leave_date').gte('leave_date', startDate).lte('leave_date', endDate).eq('article_id', articleId)
-      : supabase.from('leave_records').select('article_id, leave_date').gte('leave_date', startDate).lte('leave_date', endDate)
+    fetchAllPages<{ id: string; full_name: string }>((from, to) =>
+      (articleId
+        ? supabase.from('profiles').select('id, full_name').eq('id', articleId).in('role', ARTICLE_ROLES).eq('status', 'active').order('id').range(from, to)
+        : supabase.from('profiles').select('id, full_name').in('role', ARTICLE_ROLES).eq('status', 'active').order('full_name').order('id').range(from, to)
+      )
     ),
-    (articleId
-      ? supabase.from('attendance_records').select('article_id, attendance_date').gte('attendance_date', startDate).lte('attendance_date', endDate).eq('article_id', articleId).not('checked_in_at', 'is', null)
-      : supabase.from('attendance_records').select('article_id, attendance_date').gte('attendance_date', startDate).lte('attendance_date', endDate).not('checked_in_at', 'is', null)
+    fetchAllPages<{ article_id: string; leave_date: string }>((from, to) =>
+      (articleId
+        ? supabase.from('leave_records').select('article_id, leave_date').gte('leave_date', startDate).lte('leave_date', endDate).eq('article_id', articleId).order('article_id').order('leave_date').range(from, to)
+        : supabase.from('leave_records').select('article_id, leave_date').gte('leave_date', startDate).lte('leave_date', endDate).order('article_id').order('leave_date').range(from, to)
+      )
+    ),
+    fetchAllPages<{ article_id: string; attendance_date: string }>((from, to) =>
+      (articleId
+        ? supabase.from('attendance_records').select('article_id, attendance_date').gte('attendance_date', startDate).lte('attendance_date', endDate).eq('article_id', articleId).not('checked_in_at', 'is', null).order('id').range(from, to)
+        : supabase.from('attendance_records').select('article_id, attendance_date').gte('attendance_date', startDate).lte('attendance_date', endDate).not('checked_in_at', 'is', null).order('id').range(from, to)
+      )
     ),
   ])
 
