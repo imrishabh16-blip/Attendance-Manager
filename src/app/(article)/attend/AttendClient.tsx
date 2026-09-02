@@ -1,7 +1,9 @@
 'use client'
 
 import { useState } from 'react'
+import { useQuery } from '@tanstack/react-query'
 import toast from 'react-hot-toast'
+import { getSupabaseBrowserClient } from '@/lib/supabase/client'
 import { useGPS } from '@/hooks/useGPS'
 import { useAttendanceSession } from '@/hooks/useAttendanceSession'
 import { ClientWorkSelector } from '@/components/attendance/ClientWorkSelector'
@@ -13,7 +15,7 @@ import { Spinner } from '@/components/ui/Spinner'
 import { buildMapsLink } from '@/lib/gps'
 import { cn, formatTime, formatDuration } from '@/lib/utils'
 import type { AttendanceRecord, WorkType } from '@/types/app'
-import { MapPin, LogIn, LogOut, Calendar } from 'lucide-react'
+import { MapPin, LogIn, LogOut, Calendar, AlertCircle } from 'lucide-react'
 
 interface Props {
   profile: { id: string; full_name: string; role: string }
@@ -47,6 +49,7 @@ function getGreeting(): { text: string; sub: string } {
 }
 
 export default function AttendClient({ profile }: Props) {
+  const supabase                                                          = getSupabaseBrowserClient()
   const { acquire }                                                       = useGPS()
   const { todayRecords, openRecord, todayLeave, loading, refresh }       = useAttendanceSession(profile.id)
 
@@ -55,6 +58,31 @@ export default function AttendClient({ profile }: Props) {
   const [checkInMode, setCheckInMode] = useState<CheckInMode | null>(null)
   const [gpsCoords, setGpsCoords]     = useState<{ latitude: number; longitude: number } | null>(null)
   const [leaveLoading, setLeaveLoading] = useState(false)
+  const [reportingManagerId, setReportingManagerId] = useState('')
+
+  // Reporting Manager is not role-restricted — any active profile other than
+  // the caller qualifies (see get_reporting_manager_candidates, migration
+  // 00025). Cached via React Query the same way ClientWorkSelector caches
+  // clients/work_types, so reopening the check-in flow doesn't re-fetch.
+  //
+  // Unlike ClientWorkSelector's queries, this one intentionally lets errors
+  // surface (isError) instead of swallowing them into an empty array —
+  // Reporting Manager is mandatory, so a failed fetch must block check-in
+  // with a visible, retryable message rather than silently rendering as
+  // "no managers configured" or leaving Confirm disabled with no explanation.
+  const {
+    data:      managerCandidates,
+    isLoading: managersLoading,
+    isError:   managersError,
+    refetch:   refetchManagers,
+  } = useQuery({
+    queryKey: ['reporting_manager_candidates'],
+    queryFn: async () => {
+      const { data, error } = await supabase.rpc('get_reporting_manager_candidates')
+      if (error) throw error
+      return (data ?? []) as { id: string; full_name: string }[]
+    },
+  })
 
   // True whenever any operation is in flight
   const busy = step !== 'idle' || leaveLoading
@@ -87,6 +115,7 @@ export default function AttendClient({ profile }: Props) {
 
   async function startCheckIn() {
     setCheckInMode(null)
+    setReportingManagerId('')
     setStep('gps_loading')
     const result = await acquire()
     if (!result.success) {
@@ -110,6 +139,10 @@ export default function AttendClient({ profile }: Props) {
 
   async function submitCheckIn() {
     if (!gpsCoords || !checkInMode) return
+    if (!reportingManagerId) {
+      toast.error('Select a Reporting Manager')
+      return
+    }
     setStep('submitting')
 
     let body: Record<string, unknown>
@@ -122,6 +155,7 @@ export default function AttendClient({ profile }: Props) {
         latitude:        gpsCoords.latitude,
         longitude:       gpsCoords.longitude,
         note:            note || null,
+        reporting_manager_id: reportingManagerId,
       }
     } else {
       body = {
@@ -129,6 +163,7 @@ export default function AttendClient({ profile }: Props) {
         latitude:        gpsCoords.latitude,
         longitude:       gpsCoords.longitude,
         note:            note || null,
+        reporting_manager_id: reportingManagerId,
       }
     }
 
@@ -136,6 +171,7 @@ export default function AttendClient({ profile }: Props) {
       toast.success('Checked in successfully')
       setNote('')
       setCheckInMode(null)
+      setReportingManagerId('')
     }
 
     try {
@@ -298,6 +334,56 @@ export default function AttendClient({ profile }: Props) {
                   <CheckInSummary mode={checkInMode} />
                 )}
 
+                {/* Reporting Manager — required for every check-in, not just
+                    role-restricted candidates (see get_reporting_manager_candidates).
+                    Loading/error/empty are distinguished explicitly so a failed
+                    fetch never looks like "no managers" or a silently-stuck field. */}
+                {!isCheckoutFlow && (
+                  <div className="flex flex-col gap-1.5">
+                    <label className="text-xs font-semibold text-gray-500 uppercase tracking-wide">
+                      Reporting Manager
+                    </label>
+
+                    {managersLoading ? (
+                      <div className="flex items-center gap-2 px-3 py-2.5 rounded-xl border border-gray-200 bg-brand-50">
+                        <Spinner className="h-4 w-4" />
+                        <span className="text-sm text-gray-500">Loading Reporting Managers…</span>
+                      </div>
+                    ) : managersError ? (
+                      <div className="flex flex-col gap-2">
+                        <p className="text-sm text-red-600 bg-red-50 px-3 py-2.5 rounded-xl flex items-start gap-2">
+                          <AlertCircle className="h-4 w-4 flex-shrink-0 mt-0.5" />
+                          Unable to load Reporting Managers. Please try again or contact an administrator.
+                        </p>
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="secondary"
+                          onClick={() => refetchManagers()}
+                          className="self-start"
+                        >
+                          Retry
+                        </Button>
+                      </div>
+                    ) : (managerCandidates ?? []).length === 0 ? (
+                      <p className="text-xs text-amber-600 bg-amber-50 px-3 py-2 rounded-xl">
+                        No eligible Reporting Managers are currently available.
+                      </p>
+                    ) : (
+                      <select
+                        value={reportingManagerId}
+                        onChange={e => setReportingManagerId(e.target.value)}
+                        className="w-full px-3 py-2.5 rounded-xl border border-gray-300 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-brand-500"
+                      >
+                        <option value="">— Select who you're reporting to —</option>
+                        {(managerCandidates ?? []).map(m => (
+                          <option key={m.id} value={m.id}>{m.full_name}</option>
+                        ))}
+                      </select>
+                    )}
+                  </div>
+                )}
+
                 <textarea
                   placeholder="Add a note (optional)"
                   value={note}
@@ -308,6 +394,7 @@ export default function AttendClient({ profile }: Props) {
                 <Button
                   onClick={isCheckoutFlow ? submitCheckOut : submitCheckIn}
                   loading={step === 'submitting'}
+                  disabled={!isCheckoutFlow && (managersLoading || managersError || !reportingManagerId)}
                   className="w-full"
                   size="lg"
                 >

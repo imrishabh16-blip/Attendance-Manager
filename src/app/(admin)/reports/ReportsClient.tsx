@@ -247,8 +247,8 @@ export default function ReportsClient({ articles, assignments }: Props) {
           <CardBody>
             <div className="flex flex-col gap-3">
               <p className="text-xs text-gray-400">
-                Active Articles/Interns grouped by Reporting Manager, with a live view of what
-                each is currently working on.
+                Who's currently checked in, grouped by the Reporting Manager they selected at
+                check-in and what they're working on.
               </p>
               <Button onClick={openReportingWise} loading={reportingWiseLoading} className="w-full sm:w-auto">
                 <Eye className="h-4 w-4" />
@@ -352,8 +352,8 @@ export default function ReportsClient({ articles, assignments }: Props) {
         ) : (
           <>
             <p className="text-xs text-gray-400 mb-3">
-              Articles counts every active Article/Intern reporting to that manager. Expanding a row
-              shows only who's currently checked in and what they're working on.
+              Articles counts everyone currently checked in reporting to that manager. Expanding a
+              row shows what each is working on right now.
             </p>
             <Table>
               <Thead>
@@ -396,7 +396,7 @@ export default function ReportsClient({ articles, assignments }: Props) {
                           ) : (
                             <div className="flex flex-col gap-3">
                               {m.live_groups.map(g => (
-                                <div key={g.assignment_id ?? 'others'}>
+                                <div key={g.group_key}>
                                   <div className="flex items-center gap-2 mb-1">
                                     <span className="text-xs font-semibold text-gray-700">{g.label}</span>
                                     {g.work_type && (

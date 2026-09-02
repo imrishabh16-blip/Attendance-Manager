@@ -33,6 +33,7 @@ export interface AttendanceRecord {
   id: string
   article_id: string
   assignment_id: string | null
+  reporting_manager_id: string | null
   cycle_id: string | null
   attendance_date: string
   checked_in_at: string | null
@@ -71,15 +72,17 @@ export interface DashboardSummary {
 }
 
 export interface LiveActivityRow {
-  article_id:      string
-  article_name:    string
-  assignment_id:   string | null
-  client_name:     string | null
-  work_type:       WorkType | null
-  checked_in_at:   string
-  duration_mins:   number         // DB snapshot — component recomputes client-side
-  record_id:       string
-  attendance_type: AttendanceType
+  article_id:             string
+  article_name:           string
+  assignment_id:          string | null
+  client_name:            string | null
+  work_type:              WorkType | null
+  checked_in_at:          string
+  duration_mins:          number         // DB snapshot — component recomputes client-side
+  record_id:              string
+  attendance_type:        AttendanceType
+  reporting_manager_id:   string | null
+  reporting_manager_name: string | null
 }
 
 export interface OnLeaveArticleRow {

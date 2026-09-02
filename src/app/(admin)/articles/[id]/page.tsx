@@ -6,8 +6,7 @@ import { Badge } from '@/components/ui/Badge'
 import { ArrowLeft, MapPin } from 'lucide-react'
 import { buildMapsLink } from '@/lib/gps'
 import { formatDate, workTypeBadgeColor, cn } from '@/lib/utils'
-import { isArticleRole, type UserStatus, type UserRole, type AttendanceType } from '@/types/app'
-import ReportingManagersCard from './ReportingManagersCard'
+import { isArticleRole, type UserStatus, type AttendanceType } from '@/types/app'
 
 // IST-aware formatters for server components
 const fmtTimeIST = (iso: string) =>
@@ -85,29 +84,6 @@ export default async function ArticleDetailPage({
     .order('leave_date', { ascending: false })
     .limit(30)
 
-  // Reporting Managers — current relationships and the full candidate pool.
-  // Reporting Manager is not a role, so candidates are every active profile
-  // (any role) other than this article themselves.
-  const [{ data: rawManagers }, { data: candidateRows }] = await Promise.all([
-    supabase
-      .from('reporting_relationships')
-      .select('profiles!reporting_manager_id(id, full_name, role)')
-      .eq('article_id', id),
-    supabase
-      .from('profiles')
-      .select('id, full_name, role')
-      .eq('status', 'active')
-      .neq('id', id)
-      .order('full_name'),
-  ])
-
-  type ManagerRow = { id: string; full_name: string; role: UserRole }
-  type RawManagerRelation = { profiles: ManagerRow | ManagerRow[] | null }
-
-  const currentManagers: ManagerRow[] = ((rawManagers ?? []) as RawManagerRelation[])
-    .map(r => (Array.isArray(r.profiles) ? r.profiles[0] : r.profiles))
-    .filter((p): p is ManagerRow => p !== null && p !== undefined)
-
   // Compute summary from completed sessions
   let totalHours = 0
   const uniqueDays         = new Set<string>()
@@ -178,13 +154,6 @@ export default async function ArticleDetailPage({
 
       {/* Body */}
       <div className="max-w-3xl mx-auto px-4 sm:px-6 py-5 space-y-5">
-
-        {/* Reporting Managers */}
-        <ReportingManagersCard
-          articleId={id}
-          initialManagers={currentManagers}
-          candidates={(candidateRows ?? []) as { id: string; full_name: string; role: UserRole }[]}
-        />
 
         {/* Attendance history */}
         <Card>

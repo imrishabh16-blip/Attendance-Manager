@@ -28,7 +28,7 @@ export async function POST(req: NextRequest) {
   } catch {
     return NextResponse.json({ error: 'Invalid request body' }, { status: 400 })
   }
-  const { client_name, work_type, latitude, longitude, attendance_type, note } = body
+  const { client_name, work_type, latitude, longitude, attendance_type, note, reporting_manager_id } = body
 
   // --- Input validation ---
   if (!isValidCoordinate(latitude, longitude)) {
@@ -40,12 +40,34 @@ export async function POST(req: NextRequest) {
   if (attendance_type === 'regular' && (!client_name || !work_type)) {
     return NextResponse.json({ error: 'client_name and work_type are required for regular attendance' }, { status: 400 })
   }
+  // Reporting Manager is mandatory for every check-in (regular or
+  // unallocated) — enforced here independently of the UI, which also
+  // requires it, since a client-side-only check can be bypassed.
+  if (!reporting_manager_id || typeof reporting_manager_id !== 'string') {
+    return NextResponse.json({ error: 'Reporting Manager is required' }, { status: 400 })
+  }
+  if (reporting_manager_id === user.id) {
+    return NextResponse.json({ error: 'You cannot report to yourself' }, { status: 400 })
+  }
 
   // IST date — UTC split gives wrong date between midnight and 05:30 IST
   const today = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' })
 
   // Admin client needed for stale-record auto-close and final insert
   const admin = createAdminClient()
+
+  // Reporting Manager is explicitly not role-restricted — any currently
+  // active profile (any role) other than the caller qualifies. Checked
+  // against current data, not trusted from the client.
+  const { data: reportingManager } = await admin
+    .from('profiles')
+    .select('status')
+    .eq('id', reporting_manager_id)
+    .single()
+
+  if (!reportingManager || reportingManager.status !== 'active') {
+    return NextResponse.json({ error: 'Selected Reporting Manager is not an active user' }, { status: 400 })
+  }
 
   // --- Block if ANY prior session is still open (across all dates) ---
   const { data: openRecord } = await supabase
@@ -194,14 +216,15 @@ export async function POST(req: NextRequest) {
   const { data, error } = await admin
     .from('attendance_records')
     .insert({
-      article_id:         user.id,
-      assignment_id:      resolvedAssignmentId,
-      attendance_date:    today,
-      checked_in_at:      new Date().toISOString(),
-      checked_in_lat:     latitude,
-      checked_in_lng:     longitude,
-      note:               note ?? null,
+      article_id:            user.id,
+      assignment_id:         resolvedAssignmentId,
+      attendance_date:       today,
+      checked_in_at:         new Date().toISOString(),
+      checked_in_lat:        latitude,
+      checked_in_lng:        longitude,
+      note:                  note ?? null,
       attendance_type,
+      reporting_manager_id,
     })
     .select()
     .single()
