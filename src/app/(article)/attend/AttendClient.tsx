@@ -60,16 +60,22 @@ export default function AttendClient({ profile }: Props) {
   const [leaveLoading, setLeaveLoading] = useState(false)
   const [reportingManagerId, setReportingManagerId] = useState('')
 
-  // Reporting Manager is not role-restricted — any active profile other than
-  // the caller qualifies (see get_reporting_manager_candidates, migration
-  // 00025). Cached via React Query the same way ClientWorkSelector caches
-  // clients/work_types, so reopening the check-in flow doesn't re-fetch.
+  // Reporting Manager is not role-restricted beyond excluding Article/Intern
+  // (see get_reporting_manager_candidates, migrations 00025/00026). Cached
+  // via React Query the same way ClientWorkSelector caches clients/work_types,
+  // so reopening the check-in flow doesn't re-fetch.
+  //
+  // Only enabled for a regular check-in — Reporting Manager is optional for
+  // unallocated ones and the selector is hidden entirely there, so fetching
+  // candidates for it would be a wasted request and, worse, could block an
+  // unallocated check-in behind a loading/error state it doesn't need.
   //
   // Unlike ClientWorkSelector's queries, this one intentionally lets errors
   // surface (isError) instead of swallowing them into an empty array —
-  // Reporting Manager is mandatory, so a failed fetch must block check-in
-  // with a visible, retryable message rather than silently rendering as
-  // "no managers configured" or leaving Confirm disabled with no explanation.
+  // Reporting Manager is mandatory for regular check-ins, so a failed fetch
+  // must block those with a visible, retryable message rather than silently
+  // rendering as "no managers configured" or leaving Confirm disabled with
+  // no explanation.
   const {
     data:      managerCandidates,
     isLoading: managersLoading,
@@ -82,6 +88,7 @@ export default function AttendClient({ profile }: Props) {
       if (error) throw error
       return (data ?? []) as { id: string; full_name: string }[]
     },
+    enabled: checkInMode?.kind === 'regular',
   })
 
   // True whenever any operation is in flight
@@ -139,7 +146,7 @@ export default function AttendClient({ profile }: Props) {
 
   async function submitCheckIn() {
     if (!gpsCoords || !checkInMode) return
-    if (!reportingManagerId) {
+    if (checkInMode.kind === 'regular' && !reportingManagerId) {
       toast.error('Select a Reporting Manager')
       return
     }
@@ -163,7 +170,10 @@ export default function AttendClient({ profile }: Props) {
         latitude:        gpsCoords.latitude,
         longitude:       gpsCoords.longitude,
         note:            note || null,
-        reporting_manager_id: reportingManagerId,
+        // Reporting Manager is optional for unallocated check-ins and the
+        // selector is hidden entirely, so this is always explicitly null,
+        // never whatever stale value reportingManagerId might hold.
+        reporting_manager_id: null,
       }
     }
 
@@ -334,11 +344,12 @@ export default function AttendClient({ profile }: Props) {
                   <CheckInSummary mode={checkInMode} />
                 )}
 
-                {/* Reporting Manager — required for every check-in, not just
-                    role-restricted candidates (see get_reporting_manager_candidates).
-                    Loading/error/empty are distinguished explicitly so a failed
-                    fetch never looks like "no managers" or a silently-stuck field. */}
-                {!isCheckoutFlow && (
+                {/* Reporting Manager — mandatory for regular check-ins only;
+                    hidden entirely for unallocated ones, which may genuinely
+                    have nobody to report to (see checkin/route.ts). Loading/
+                    error/empty are distinguished explicitly so a failed fetch
+                    never looks like "no managers" or a silently-stuck field. */}
+                {!isCheckoutFlow && checkInMode?.kind === 'regular' && (
                   <div className="flex flex-col gap-1.5">
                     <label className="text-xs font-semibold text-gray-500 uppercase tracking-wide">
                       Reporting Manager
@@ -394,7 +405,11 @@ export default function AttendClient({ profile }: Props) {
                 <Button
                   onClick={isCheckoutFlow ? submitCheckOut : submitCheckIn}
                   loading={step === 'submitting'}
-                  disabled={!isCheckoutFlow && (managersLoading || managersError || !reportingManagerId)}
+                  disabled={
+                    !isCheckoutFlow &&
+                    checkInMode?.kind === 'regular' &&
+                    (managersLoading || managersError || !reportingManagerId)
+                  }
                   className="w-full"
                   size="lg"
                 >

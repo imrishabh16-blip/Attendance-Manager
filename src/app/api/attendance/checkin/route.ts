@@ -40,13 +40,17 @@ export async function POST(req: NextRequest) {
   if (attendance_type === 'regular' && (!client_name || !work_type)) {
     return NextResponse.json({ error: 'client_name and work_type are required for regular attendance' }, { status: 400 })
   }
-  // Reporting Manager is mandatory for every check-in (regular or
-  // unallocated) — enforced here independently of the UI, which also
-  // requires it, since a client-side-only check can be bypassed.
-  if (!reporting_manager_id || typeof reporting_manager_id !== 'string') {
+  // Reporting Manager is mandatory for regular check-ins; optional for
+  // unallocated ones — an unallocated person may genuinely have nobody to
+  // report to. Enforced here independently of the UI either way, since a
+  // client-side-only check can be bypassed. Any non-string value (missing,
+  // null, wrong type) is treated as "not supplied".
+  const hasReportingManager = typeof reporting_manager_id === 'string' && reporting_manager_id.length > 0
+
+  if (attendance_type === 'regular' && !hasReportingManager) {
     return NextResponse.json({ error: 'Reporting Manager is required' }, { status: 400 })
   }
-  if (reporting_manager_id === user.id) {
+  if (hasReportingManager && reporting_manager_id === user.id) {
     return NextResponse.json({ error: 'You cannot report to yourself' }, { status: 400 })
   }
 
@@ -56,17 +60,25 @@ export async function POST(req: NextRequest) {
   // Admin client needed for stale-record auto-close and final insert
   const admin = createAdminClient()
 
-  // Reporting Manager is explicitly not role-restricted — any currently
-  // active profile (any role) other than the caller qualifies. Checked
-  // against current data, not trusted from the client.
-  const { data: reportingManager } = await admin
-    .from('profiles')
-    .select('status')
-    .eq('id', reporting_manager_id)
-    .single()
+  // When a Reporting Manager IS supplied (mandatory for regular, optional
+  // for unallocated), it's still fully validated: not role-restricted
+  // beyond excluding Article/Intern (see migration 00026) — any other
+  // currently active profile qualifies. Checked against current data,
+  // never trusted from the client or from whatever the candidate RPC
+  // happened to return. Skipped entirely when legitimately absent.
+  if (hasReportingManager) {
+    const { data: reportingManager } = await admin
+      .from('profiles')
+      .select('status, role')
+      .eq('id', reporting_manager_id as string)
+      .single()
 
-  if (!reportingManager || reportingManager.status !== 'active') {
-    return NextResponse.json({ error: 'Selected Reporting Manager is not an active user' }, { status: 400 })
+    if (!reportingManager || reportingManager.status !== 'active') {
+      return NextResponse.json({ error: 'Selected Reporting Manager is not an active user' }, { status: 400 })
+    }
+    if (isArticleRole(reportingManager.role)) {
+      return NextResponse.json({ error: 'Selected Reporting Manager cannot be an Article or Intern' }, { status: 400 })
+    }
   }
 
   // --- Block if ANY prior session is still open (across all dates) ---
@@ -224,7 +236,7 @@ export async function POST(req: NextRequest) {
       checked_in_lng:        longitude,
       note:                  note ?? null,
       attendance_type,
-      reporting_manager_id,
+      reporting_manager_id: hasReportingManager ? reporting_manager_id : null,
     })
     .select()
     .single()

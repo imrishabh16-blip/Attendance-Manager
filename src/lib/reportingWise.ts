@@ -14,11 +14,19 @@ export type ReportingWiseGroup = {
 }
 
 export type ReportingWiseManager = {
+  // A real profile UUID, or NO_MANAGER_KEY for the synthetic "No Reporting
+  // Manager" category. Consumers only ever use this for React keys and
+  // expand/collapse comparison, never to look up a profile, so the
+  // synthetic string is safe to carry in the same field.
   reporting_manager_id: string
   full_name:            string
   active_count:         number
   live_groups:          ReportingWiseGroup[]
 }
+
+// Namespaced like the 'type:unallocated' / 'type:others' group keys below,
+// so it can never collide with a real manager's UUID.
+const NO_MANAGER_KEY = 'manager:none'
 
 // Assignment-less sessions ('others' and 'unallocated') both have
 // assignment_id = null, so grouping on assignment_id alone would merge two
@@ -51,16 +59,19 @@ export function groupLiveActivityByReportingManager(rows: LiveActivityRow[]): Re
   const managersById = new Map<string, ManagerAcc>()
 
   for (const row of rows) {
-    if (!row.reporting_manager_id) continue // no manager selected for this session
+    // NULL is a genuine, expected state — an unallocated check-in may
+    // legitimately have nobody to report to. It must still be represented,
+    // under the synthetic "No Reporting Manager" category, not dropped.
+    const managerKey = row.reporting_manager_id ?? NO_MANAGER_KEY
 
-    let acc = managersById.get(row.reporting_manager_id)
+    let acc = managersById.get(managerKey)
     if (!acc) {
       acc = {
-        full_name:   row.reporting_manager_name ?? '—',
+        full_name:   row.reporting_manager_id ? (row.reporting_manager_name ?? '—') : 'No Reporting Manager',
         articleIds:  new Set(),
         groupsByKey: new Map(),
       }
-      managersById.set(row.reporting_manager_id, acc)
+      managersById.set(managerKey, acc)
     }
     acc.articleIds.add(row.article_id)
 
