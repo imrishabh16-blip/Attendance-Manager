@@ -10,6 +10,9 @@ interface MetricCardProps {
   alert?: boolean
   href?:  string
   onClick?: () => void
+  // Icon-beside-text instead of icon-above-text, for a full-width bar rather
+  // than a grid cell. Same tokens (bg/border/shadow/typography) either way.
+  wide?: boolean
 }
 
 const colors = {
@@ -21,15 +24,16 @@ const colors = {
   gray:   { bg: 'bg-gray-100',  icon: 'text-gray-500',   value: 'text-gray-700' },
 }
 
-export function MetricCard({ label, value, icon: Icon, color = 'blue', alert, href, onClick }: MetricCardProps) {
+export function MetricCard({ label, value, icon: Icon, color = 'blue', alert, href, onClick, wide }: MetricCardProps) {
   const c = colors[color]
   const card = (
     <div className={cn(
-      'bg-white rounded-2xl border border-brand-200 shadow-sm p-4 flex flex-col gap-3',
+      'bg-white rounded-2xl border border-brand-200 shadow-sm p-4 flex gap-3',
+      wide ? 'flex-row items-center' : 'flex-col',
       alert && 'ring-2 ring-red-300',
       (href || onClick) && 'cursor-pointer hover:shadow-md transition-shadow'
     )}>
-      <div className={cn('inline-flex items-center justify-center w-10 h-10 rounded-xl', c.bg)}>
+      <div className={cn('inline-flex items-center justify-center w-10 h-10 rounded-xl flex-shrink-0', c.bg)}>
         <Icon className={cn('h-5 w-5', c.icon)} />
       </div>
       <div>

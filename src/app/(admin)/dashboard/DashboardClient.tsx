@@ -1,15 +1,16 @@
 'use client'
 
-import { useState, useMemo } from 'react'
+import { useState, useMemo, Fragment } from 'react'
 import { useRealtimeDashboard } from '@/hooks/useRealtimeDashboard'
 import { MetricCard } from '@/components/dashboard/MetricCard'
 import { LiveActivityTable } from '@/components/dashboard/LiveActivityTable'
 import { Card, CardHeader, CardBody } from '@/components/ui/Card'
 import { Modal } from '@/components/ui/Modal'
 import { Table, Thead, Tbody, Th, Td } from '@/components/ui/Table'
-import { RefreshCw, UserCheck, UserX, Users, Layers, ChevronDown, Search, Download, Loader2 } from 'lucide-react'
+import { RefreshCw, UserCheck, UserX, Users, Layers, UserCog, ChevronDown, Search, Download, Loader2 } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { cn, formatTime, workTypeBadgeColor } from '@/lib/utils'
+import { groupLiveActivityByReportingManager } from '@/lib/reportingWise'
 import type { TodaySessionItem } from '@/app/api/dashboard/today-sessions/route'
 
 interface Props {
@@ -95,6 +96,19 @@ export default function DashboardClient({ profile: _ }: Props) {
       .sort((a, b) => b.count - a.count || a.work_type.localeCompare(b.work_type))
   }, [liveActivity])
 
+  // ── Reporting Wise modal ────────────────────────────────────────────────────
+  // Same grouping used by the Reports-tab Reporting Wise report (lib/
+  // reportingWise.ts), applied to the same liveActivity already fetched for
+  // this page — no separate API call, and realtime updates for free via the
+  // existing subscription in useRealtimeDashboard.
+  const [reportingWiseOpen, setReportingWiseOpen] = useState(false)
+  const [expandedManagerId, setExpandedManagerId] = useState<string | null>(null)
+
+  const reportingWiseData = useMemo(
+    () => groupLiveActivityByReportingManager(liveActivity),
+    [liveActivity]
+  )
+
   // ── On Leave modal ────────────────────────────────────────────────────────
   const [onLeaveOpen,   setOnLeaveOpen]   = useState(false)
   const [onLeaveSearch, setOnLeaveSearch] = useState('')
@@ -174,6 +188,7 @@ export default function DashboardClient({ profile: _ }: Props) {
                 </div>
               ))}
             </div>
+            <div className="bg-white rounded-2xl border border-brand-200 shadow-sm h-[76px] animate-pulse" />
             <div className="bg-white rounded-2xl border border-brand-200 shadow-sm h-40 animate-pulse" />
           </>
         ) : (
@@ -209,6 +224,16 @@ export default function DashboardClient({ profile: _ }: Props) {
                 onClick={() => setWorkWiseOpen(true)}
               />
             </div>
+
+            {/* Reporting Wise — full width, below the 2x2 grid */}
+            <MetricCard
+              label="Reporting Wise"
+              value={reportingWiseData.length}
+              icon={UserCog}
+              color="purple"
+              wide
+              onClick={() => setReportingWiseOpen(true)}
+            />
 
             {/* Currently Checked In — collapsible */}
             <Card>
@@ -441,6 +466,85 @@ export default function DashboardClient({ profile: _ }: Props) {
                   </Td>
                 </tr>
               ))}
+            </Tbody>
+          </Table>
+        )}
+      </Modal>
+
+      {/* ── Reporting Wise modal ── */}
+      <Modal
+        open={reportingWiseOpen}
+        onClose={() => { setReportingWiseOpen(false); setExpandedManagerId(null) }}
+        title="Reporting Wise Articles"
+        className="sm:max-w-2xl"
+      >
+        {reportingWiseData.length === 0 ? (
+          <p className="text-sm text-gray-400 text-center py-6">
+            No Reporting Managers with currently active Articles/Interns
+          </p>
+        ) : (
+          <Table>
+            <Thead>
+              <tr>
+                <Th>Reporting Manager</Th>
+                <Th>Articles</Th>
+              </tr>
+            </Thead>
+            <Tbody>
+              {reportingWiseData.map(m => {
+                const expanded = expandedManagerId === m.reporting_manager_id
+                return (
+                  <Fragment key={m.reporting_manager_id}>
+                    <tr
+                      className="hover:bg-brand-50 cursor-pointer"
+                      onClick={() => setExpandedManagerId(expanded ? null : m.reporting_manager_id)}
+                    >
+                      <Td>
+                        <div className="flex items-center gap-2">
+                          <ChevronDown
+                            className={cn(
+                              'h-3.5 w-3.5 text-gray-400 transition-transform flex-shrink-0',
+                              expanded && 'rotate-180'
+                            )}
+                          />
+                          <span className="font-medium text-gray-900">{m.full_name}</span>
+                        </div>
+                      </Td>
+                      <Td>
+                        <span className="font-semibold text-gray-900">{m.active_count}</span>
+                      </Td>
+                    </tr>
+                    {expanded && (
+                      <tr>
+                        <td colSpan={2} className="px-4 py-3 bg-brand-50">
+                          <div className="flex flex-col gap-3">
+                            {m.live_groups.map(g => (
+                              <div key={g.group_key}>
+                                <div className="flex items-center gap-2 mb-1">
+                                  <span className="text-xs font-semibold text-gray-700">{g.label}</span>
+                                  {g.work_type && (
+                                    <span className={cn(
+                                      'text-xs font-medium px-1.5 py-0.5 rounded-full',
+                                      workTypeBadgeColor(g.work_type)
+                                    )}>
+                                      {g.work_type}
+                                    </span>
+                                  )}
+                                </div>
+                                <ul className="pl-4 list-disc text-sm text-gray-700 space-y-0.5">
+                                  {g.articles.map(a => (
+                                    <li key={a.article_id}>{a.full_name}</li>
+                                  ))}
+                                </ul>
+                              </div>
+                            ))}
+                          </div>
+                        </td>
+                      </tr>
+                    )}
+                  </Fragment>
+                )
+              })}
             </Tbody>
           </Table>
         )}
