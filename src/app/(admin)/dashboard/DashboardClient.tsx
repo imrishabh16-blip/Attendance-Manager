@@ -83,16 +83,23 @@ export default function DashboardClient({ profile: _ }: Props) {
   // from liveActivity (open sessions only) — regular check-ins carry a
   // work_type; unallocated/others rows have work_type = null and are excluded.
   const [workWiseOpen, setWorkWiseOpen] = useState(false)
+  const [expandedWorkType, setExpandedWorkType] = useState<string | null>(null)
 
   const workWiseCounts = useMemo(() => {
-    const map = new Map<string, number>()
+    const map = new Map<string, { article_id: string; article_name: string }[]>()
     for (const r of liveActivity) {
       if (r.attendance_type === 'regular' && r.work_type) {
-        map.set(r.work_type, (map.get(r.work_type) ?? 0) + 1)
+        const articles = map.get(r.work_type) ?? []
+        articles.push({ article_id: r.article_id, article_name: r.article_name })
+        map.set(r.work_type, articles)
       }
     }
     return [...map.entries()]
-      .map(([work_type, count]) => ({ work_type, count }))
+      .map(([work_type, articles]) => ({
+        work_type,
+        count: articles.length,
+        articles: articles.sort((a, b) => a.article_name.localeCompare(b.article_name)),
+      }))
       .sort((a, b) => b.count - a.count || a.work_type.localeCompare(b.work_type))
   }, [liveActivity])
 
@@ -442,8 +449,9 @@ export default function DashboardClient({ profile: _ }: Props) {
       {/* ── Work Wise modal ── */}
       <Modal
         open={workWiseOpen}
-        onClose={() => setWorkWiseOpen(false)}
+        onClose={() => { setWorkWiseOpen(false); setExpandedWorkType(null) }}
         title="Work Wise Articles"
+        className="sm:max-w-2xl"
       >
         {workWiseCounts.length === 0 ? (
           <p className="text-sm text-gray-400 text-center py-6">No articles currently on client work</p>
@@ -456,16 +464,43 @@ export default function DashboardClient({ profile: _ }: Props) {
               </tr>
             </Thead>
             <Tbody>
-              {workWiseCounts.map(row => (
-                <tr key={row.work_type}>
-                  <Td>
-                    <span className="font-medium text-gray-900">{row.work_type}</span>
-                  </Td>
-                  <Td>
-                    <span className="font-semibold text-gray-900">{row.count}</span>
-                  </Td>
-                </tr>
-              ))}
+              {workWiseCounts.map(row => {
+                const expanded = expandedWorkType === row.work_type
+                return (
+                  <Fragment key={row.work_type}>
+                    <tr
+                      className="hover:bg-brand-50 cursor-pointer"
+                      onClick={() => setExpandedWorkType(expanded ? null : row.work_type)}
+                    >
+                      <Td>
+                        <div className="flex items-center gap-2">
+                          <ChevronDown
+                            className={cn(
+                              'h-3.5 w-3.5 text-gray-400 transition-transform flex-shrink-0',
+                              expanded && 'rotate-180'
+                            )}
+                          />
+                          <span className="font-medium text-gray-900">{row.work_type}</span>
+                        </div>
+                      </Td>
+                      <Td>
+                        <span className="font-semibold text-gray-900">{row.count}</span>
+                      </Td>
+                    </tr>
+                    {expanded && (
+                      <tr>
+                        <td colSpan={2} className="px-4 py-3 bg-brand-50">
+                          <ul className="pl-4 list-disc text-sm text-gray-700 space-y-0.5">
+                            {row.articles.map(a => (
+                              <li key={a.article_id}>{a.article_name}</li>
+                            ))}
+                          </ul>
+                        </td>
+                      </tr>
+                    )}
+                  </Fragment>
+                )
+              })}
             </Tbody>
           </Table>
         )}
