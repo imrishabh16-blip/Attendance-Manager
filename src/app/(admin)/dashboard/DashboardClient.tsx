@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useMemo, Fragment } from 'react'
-import { useRealtimeDashboard } from '@/hooks/useRealtimeDashboard'
+import { useRealtimeDashboard, type DashboardInitialData } from '@/hooks/useRealtimeDashboard'
 import { MetricCard } from '@/components/dashboard/MetricCard'
 import { LiveActivityTable } from '@/components/dashboard/LiveActivityTable'
 import { Card, CardHeader, CardBody } from '@/components/ui/Card'
@@ -15,6 +15,7 @@ import type { TodaySessionItem } from '@/app/api/dashboard/today-sessions/route'
 
 interface Props {
   profile: { id: string; full_name: string; role: string }
+  initialData: DashboardInitialData
 }
 
 // TodaySessionItem is imported from the API route — flat shape, names pre-resolved server-side
@@ -34,8 +35,8 @@ function ModalSearch({ value, onChange }: { value: string; onChange: (v: string)
   )
 }
 
-export default function DashboardClient({ profile: _ }: Props) {
-  const { summary, liveActivity, onLeaveArticles, awolArticles, loading, refresh } = useRealtimeDashboard()
+export default function DashboardClient({ profile: _, initialData }: Props) {
+  const { summary, liveActivity, onLeaveArticles, awolArticles, loading, refresh } = useRealtimeDashboard(initialData)
 
   const s = summary
 

@@ -4,15 +4,26 @@ import { useEffect, useState, useCallback, useRef } from 'react'
 import { getSupabaseBrowserClient } from '@/lib/supabase/client'
 import type { DashboardSummary, LiveActivityRow, OnLeaveArticleRow } from '@/types/app'
 
-export function useRealtimeDashboard() {
+export interface DashboardInitialData {
+  summary:         DashboardSummary | null
+  liveActivity:    LiveActivityRow[]
+  onLeaveArticles: OnLeaveArticleRow[]
+  awolArticles:    OnLeaveArticleRow[]
+}
+
+export function useRealtimeDashboard(initialData?: DashboardInitialData) {
   const supabase = getSupabaseBrowserClient()
 
-  const [summary, setSummary]         = useState<DashboardSummary | null>(null)
-  const [liveActivity, setLive]       = useState<LiveActivityRow[]>([])
-  const [onLeaveArticles, setOnLeave] = useState<OnLeaveArticleRow[]>([])
-  const [awolArticles, setAwol]       = useState<OnLeaveArticleRow[]>([])
-  const [loading, setLoading]         = useState(true)
+  const [summary, setSummary]         = useState<DashboardSummary | null>(initialData?.summary ?? null)
+  const [liveActivity, setLive]       = useState<LiveActivityRow[]>(initialData?.liveActivity ?? [])
+  const [onLeaveArticles, setOnLeave] = useState<OnLeaveArticleRow[]>(initialData?.onLeaveArticles ?? [])
+  const [awolArticles, setAwol]       = useState<OnLeaveArticleRow[]>(initialData?.awolArticles ?? [])
+  const [loading, setLoading]         = useState(!initialData)
   const timerRef                      = useRef<ReturnType<typeof setTimeout> | null>(null)
+  // Captured once so the mount effect below can skip its initial refresh()
+  // without needing `initialData` — a prop that never changes post-mount —
+  // in its dependency array.
+  const hasInitialData                = useRef(!!initialData)
 
   const refresh = useCallback(async () => {
     const [summaryRes, liveRes, onLeaveRes, awolRes] = await Promise.all([
@@ -38,7 +49,9 @@ export function useRealtimeDashboard() {
   }, [refresh])
 
   useEffect(() => {
-    refresh()
+    // Server already fetched this for initial render — only fetch here if
+    // that didn't happen, so mount never duplicates the same 4 RPCs.
+    if (!hasInitialData.current) refresh()
 
     const channel = supabase
       .channel('dashboard-live')
