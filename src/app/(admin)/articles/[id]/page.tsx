@@ -1,5 +1,5 @@
 import { redirect, notFound } from 'next/navigation'
-import { createClient } from '@/lib/supabase/server'
+import { getViewer } from '@/lib/supabase/server'
 import Link from 'next/link'
 import { Card, CardHeader, CardBody } from '@/components/ui/Card'
 import { Badge } from '@/components/ui/Badge'
@@ -38,15 +38,8 @@ export default async function ArticleDetailPage({
 }) {
   const { id } = await params
 
-  const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
+  const { supabase, user, profile: viewer } = await getViewer()
   if (!user) redirect('/login')
-
-  const { data: viewer } = await supabase
-    .from('profiles')
-    .select('role, status')
-    .eq('id', user.id)
-    .single()
 
   if (!viewer || viewer.status !== 'active') {
     redirect(viewer?.status === 'deactivated' ? '/deactivated' : '/awaiting')

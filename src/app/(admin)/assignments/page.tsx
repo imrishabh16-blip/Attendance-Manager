@@ -1,18 +1,11 @@
 import { redirect } from 'next/navigation'
-import { createClient } from '@/lib/supabase/server'
+import { getViewer } from '@/lib/supabase/server'
 import AssignmentsClient from './AssignmentsClient'
 import { isArticleRole } from '@/types/app'
 
 export default async function AssignmentsPage() {
-  const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
+  const { supabase, user, profile } = await getViewer()
   if (!user) redirect('/login')
-
-  const { data: profile } = await supabase
-    .from('profiles')
-    .select('role, status')
-    .eq('id', user.id)
-    .single()
 
   if (!profile || profile.status !== 'active') redirect(profile?.status === 'deactivated' ? '/deactivated' : '/awaiting')
   if (isArticleRole(profile.role)) redirect('/attend')

@@ -1,6 +1,7 @@
 import { createServerClient } from '@supabase/ssr'
 import type { CookieOptions } from '@supabase/ssr'
 import { cookies } from 'next/headers'
+import { cache } from 'react'
 
 // Next.js 15: cookies() is async — must await before calling getAll/set
 export async function createClient() {
@@ -28,3 +29,23 @@ export async function createClient() {
     }
   )
 }
+
+// Request-scoped: the admin layout and every admin page independently ran
+// auth.getUser() + the same profiles lookup, each paying its own round trip.
+// cache() (React's per-render memoization) makes every caller within one
+// request share a single in-flight lookup instead. Does not — and cannot —
+// cover middleware's own check: middleware runs before this render starts,
+// in a separate execution context that cache() has no visibility into.
+export const getViewer = cache(async () => {
+  const supabase = await createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) return { supabase, user: null, profile: null }
+
+  const { data: profile } = await supabase
+    .from('profiles')
+    .select('id, full_name, role, status')
+    .eq('id', user.id)
+    .single()
+
+  return { supabase, user, profile }
+})
