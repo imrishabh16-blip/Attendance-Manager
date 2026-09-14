@@ -1,8 +1,10 @@
 import { createClient } from '@/lib/supabase/server'
+import { buildClientWorkDurationExcel } from '@/lib/export'
 import { deriveClientWorkDuration, type RawSessionRecord, type ClientWorkSlot } from '@/lib/sessionReport'
-import { NextResponse } from 'next/server'
-import { isArticleRole } from '@/types/app'
+import { NextRequest, NextResponse } from 'next/server'
 import type { PostgrestError } from '@supabase/supabase-js'
+
+const ALLOWED_ROLES = ['admin', 'partner', 'manager']
 
 // Supabase/PostgREST caps any single response at this many rows — this
 // query has no date bound (full attendance history), so it must page
@@ -47,27 +49,31 @@ function extractAssignment(
   return assignments
 }
 
-// GET /api/dashboard/client-work-duration — Client Work Duration tile
+// GET /api/export/client-work-duration — Client Work Duration report
 //
-// Historical data (full attendance history, same query shape as the Session
-// Report's /api/export/assignments) — intentionally NOT part of the
-// Dashboard's realtime RPC bundle (useRealtimeDashboard). The Dashboard
-// fetches this only when the tile's modal is opened, same as
-// /api/dashboard/today-sessions.
-export async function GET() {
+// ?format=json  optional — returns { rows: ClientWorkSlot[] } instead of an
+//                .xlsx file. Used by the Client Work Duration page so it
+//                renders EXACTLY the same data the Excel export produces —
+//                both paths call deriveClientWorkDuration() against the same
+//                query result, so the two views can never diverge. Mirrors
+//                api/export/assignments' format=json / default-xlsx split.
+export async function GET(req: NextRequest) {
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
-  const { data: viewer } = await supabase
+  const { data: profile } = await supabase
     .from('profiles')
     .select('role, status')
     .eq('id', user.id)
     .single()
 
-  if (!viewer || viewer.status !== 'active' || isArticleRole(viewer.role)) {
-    return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+  if (!profile || profile.status !== 'active' || !ALLOWED_ROLES.includes(profile.role)) {
+    return NextResponse.json({ error: 'Insufficient permissions' }, { status: 403 })
   }
+
+  const { searchParams } = new URL(req.url)
+  const wantsJson = searchParams.get('format') === 'json'
 
   // Paginated, joined with assignments + profiles — no N+1. No date bound
   // (Client Work Duration always covers full history). .order('id') is a
@@ -105,5 +111,17 @@ export async function GET() {
   const todayIST = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' })
   const rows: ClientWorkSlot[] = deriveClientWorkDuration(records, todayIST)
 
-  return NextResponse.json({ rows })
+  if (wantsJson) {
+    return NextResponse.json({ rows })
+  }
+
+  const buffer = await buildClientWorkDurationExcel(rows)
+  const filename = `client_work_duration_${todayIST}.xlsx`
+
+  return new NextResponse(new Uint8Array(buffer), {
+    headers: {
+      'Content-Type':        'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      'Content-Disposition': `attachment; filename="${filename}"`,
+    },
+  })
 }

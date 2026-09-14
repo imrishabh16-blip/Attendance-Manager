@@ -5,7 +5,7 @@ import { usePathname, useRouter } from 'next/navigation'
 import { getSupabaseBrowserClient } from '@/lib/supabase/client'
 import { cn } from '@/lib/utils'
 import {
-  LayoutDashboard, Briefcase, Users, FileText, LogOut, GraduationCap
+  LayoutDashboard, Briefcase, Users, FileText, Clock, LogOut, GraduationCap
 } from 'lucide-react'
 import type { UserRole } from '@/types/app'
 
@@ -14,11 +14,12 @@ interface Props {
 }
 
 const navItems = [
-  { href: '/dashboard',   label: 'Dashboard',    icon: LayoutDashboard, roles: ['admin', 'partner', 'manager'] as UserRole[] },
-  { href: '/assignments', label: 'Assignments',   icon: Briefcase,       roles: ['admin', 'partner', 'manager'] as UserRole[] },
-  { href: '/articles',    label: 'Articles',      icon: GraduationCap,   roles: ['admin', 'partner', 'manager'] as UserRole[] },
-  { href: '/users',       label: 'Users',         icon: Users,           roles: ['admin'] as UserRole[] },
-  { href: '/reports',     label: 'Reports',       icon: FileText,        roles: ['admin', 'partner', 'manager'] as UserRole[] },
+  { href: '/dashboard',              label: 'Dashboard',              icon: LayoutDashboard, roles: ['admin', 'partner', 'manager'] as UserRole[] },
+  { href: '/assignments',            label: 'Assignments',            icon: Briefcase,       roles: ['admin', 'partner', 'manager'] as UserRole[] },
+  { href: '/articles',               label: 'Articles',               icon: GraduationCap,   roles: ['admin', 'partner', 'manager'] as UserRole[] },
+  { href: '/users',                  label: 'Users',                  icon: Users,           roles: ['admin'] as UserRole[] },
+  { href: '/reports',                label: 'Reports',                icon: FileText,        roles: ['admin', 'partner', 'manager'] as UserRole[] },
+  { href: '/client-work-duration',   label: 'Client Work Duration',   icon: Clock,           roles: ['admin', 'partner', 'manager'] as UserRole[] },
 ]
 
 export default function AdminNav({ profile }: Props) {

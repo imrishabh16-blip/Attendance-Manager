@@ -1,4 +1,5 @@
 import ExcelJS from 'exceljs'
+import type { ClientWorkSlot } from '@/lib/sessionReport'
 
 export interface StatusReportRow {
   article_name: string
@@ -245,6 +246,56 @@ export async function buildSessionReportExcel(rows: SessionReportRow[]): Promise
   }
 
   ws.autoFilter = { from: 'A1', to: 'K1' }
+
+  const buffer = await wb.xlsx.writeBuffer()
+  return Buffer.from(buffer)
+}
+
+// Client Work Duration shares the Session Report's Active/Completed
+// semantics, so it reuses SESSION_STATUS_COLORS rather than redeclaring the
+// same two colors under a new name.
+export async function buildClientWorkDurationExcel(rows: ClientWorkSlot[]): Promise<Buffer> {
+  const wb = new ExcelJS.Workbook()
+  wb.creator = 'CA Attendance Manager'
+  wb.created = new Date()
+
+  const ws = wb.addWorksheet('Client Work Duration', {
+    views: [{ state: 'frozen', ySplit: 1 }],
+  })
+
+  ws.columns = [
+    { header: 'Client Name',     key: 'client_name',      width: 28 },
+    { header: 'No. of Articles', key: 'articles_count',   width: 14 },
+    { header: 'Article Names',   key: 'article_names',    width: 36 },
+    { header: 'Days Punched',    key: 'attendance_days',  width: 14 },
+    { header: 'Hours Punched',   key: 'total_hours',      width: 14 },
+    { header: 'First Punch',     key: 'first_date',       width: 16 },
+    { header: 'Last Punch',      key: 'last_date',        width: 16 },
+    { header: 'Status',          key: 'status',           width: 12 },
+    { header: 'Work Slot No.',   key: 'slot_number',      width: 14 },
+  ]
+
+  applyHeaderStyle(ws.getRow(1))
+
+  const fmtDate = (iso: string) => new Date(iso).toLocaleDateString('en-IN')
+
+  for (const row of rows) {
+    const r = ws.addRow({
+      client_name:      row.client_name,
+      articles_count:   row.articles_count,
+      article_names:    row.article_names,
+      attendance_days:  row.attendance_days,
+      total_hours:      row.total_hours,
+      first_date:       fmtDate(row.first_date),
+      last_date:        fmtDate(row.last_date),
+      status:           row.status,
+      slot_number:      row.slot_number,
+    })
+    const color = SESSION_STATUS_COLORS[row.status]
+    if (color) r.getCell('status').font = { bold: true, color: { argb: color } }
+  }
+
+  ws.autoFilter = { from: 'A1', to: 'I1' }
 
   const buffer = await wb.xlsx.writeBuffer()
   return Buffer.from(buffer)

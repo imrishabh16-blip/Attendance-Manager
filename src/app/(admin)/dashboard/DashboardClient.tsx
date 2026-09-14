@@ -7,12 +7,11 @@ import { LiveActivityTable } from '@/components/dashboard/LiveActivityTable'
 import { Card, CardHeader, CardBody } from '@/components/ui/Card'
 import { Modal } from '@/components/ui/Modal'
 import { Table, Thead, Tbody, Th, Td } from '@/components/ui/Table'
-import { RefreshCw, UserCheck, UserX, Users, Layers, UserCog, Clock, ChevronDown, Search, Download, Loader2 } from 'lucide-react'
+import { RefreshCw, UserCheck, UserX, Users, Layers, UserCog, ChevronDown, Search, Download, Loader2 } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { cn, formatTime, workTypeBadgeColor } from '@/lib/utils'
 import { groupLiveActivityByReportingManager } from '@/lib/reportingWise'
 import type { TodaySessionItem } from '@/app/api/dashboard/today-sessions/route'
-import type { ClientWorkSlot } from '@/lib/sessionReport'
 
 interface Props {
   profile: { id: string; full_name: string; role: string }
@@ -117,32 +116,6 @@ export default function DashboardClient({ profile: _, initialData }: Props) {
     () => groupLiveActivityByReportingManager(liveActivity),
     [liveActivity]
   )
-
-  // ── Client Work Duration modal — lazy loaded via server API ──────────────
-  // Historical (full attendance history), unlike the tiles above which are
-  // derived from liveActivity (today's open sessions only) — so this is
-  // fetched on demand rather than folded into useRealtimeDashboard's bundle.
-  const [clientWorkOpen,    setClientWorkOpen]    = useState(false)
-  const [clientWorkLoading, setClientWorkLoading] = useState(false)
-  const [clientWorkRows,    setClientWorkRows]    = useState<ClientWorkSlot[] | null>(null)
-
-  async function openClientWorkDuration() {
-    setClientWorkOpen(true)
-    setClientWorkLoading(true)
-    try {
-      const res = await fetch('/api/dashboard/client-work-duration')
-      if (res.ok) {
-        const { rows } = await res.json() as { rows: ClientWorkSlot[] }
-        setClientWorkRows(rows)
-      }
-    } catch {
-      // Network failure — loading cleared, modal shows empty state
-    } finally {
-      setClientWorkLoading(false)
-    }
-  }
-
-  const clientWorkCount = clientWorkRows ? new Set(clientWorkRows.map(r => r.client_name)).size : '—'
 
   // ── On Leave modal ────────────────────────────────────────────────────────
   const [onLeaveOpen,   setOnLeaveOpen]   = useState(false)
@@ -268,16 +241,6 @@ export default function DashboardClient({ profile: _, initialData }: Props) {
               color="purple"
               wide
               onClick={() => setReportingWiseOpen(true)}
-            />
-
-            {/* Client Work Duration — full width, historical (lazy-loaded on open) */}
-            <MetricCard
-              label="Client Work Duration"
-              value={clientWorkCount}
-              icon={Clock}
-              color="blue"
-              wide
-              onClick={openClientWorkDuration}
             />
 
             {/* Currently Checked In — collapsible */}
@@ -618,61 +581,6 @@ export default function DashboardClient({ profile: _, initialData }: Props) {
                   </Fragment>
                 )
               })}
-            </Tbody>
-          </Table>
-        )}
-      </Modal>
-
-      {/* ── Client Work Duration modal ── */}
-      <Modal
-        open={clientWorkOpen}
-        onClose={() => setClientWorkOpen(false)}
-        title="Client Work Duration"
-        className="sm:max-w-5xl"
-      >
-        {clientWorkLoading ? (
-          <div className="space-y-2">
-            {[0, 1, 2].map(i => (
-              <div key={i} className="h-12 bg-brand-100 rounded-xl animate-pulse" />
-            ))}
-          </div>
-        ) : !clientWorkRows || clientWorkRows.length === 0 ? (
-          <p className="text-sm text-gray-400 text-center py-8">No client work slots found</p>
-        ) : (
-          <Table>
-            <Thead>
-              <tr>
-                <Th>Client</Th>
-                <Th>Work Slot</Th>
-                <Th>Articles</Th>
-                <Th>Article Names</Th>
-                <Th>Days</Th>
-                <Th>Hours</Th>
-                <Th>Status</Th>
-                <Th>First Punch</Th>
-                <Th>Last Punch</Th>
-              </tr>
-            </Thead>
-            <Tbody>
-              {clientWorkRows.map((row, i) => (
-                <tr key={`${row.client_name}-${row.slot_number}-${i}`} className="hover:bg-brand-50">
-                  <Td>{row.client_name}</Td>
-                  <Td>{row.slot_number}</Td>
-                  <Td>{row.articles_count}</Td>
-                  <Td className="max-w-xs truncate">
-                    <span title={row.article_names}>{row.article_names}</span>
-                  </Td>
-                  <Td>{row.attendance_days}</Td>
-                  <Td>{row.total_hours}</Td>
-                  <Td>
-                    <span className={row.status === 'Active' ? 'text-green-700 font-medium' : 'text-blue-700 font-medium'}>
-                      {row.status}
-                    </span>
-                  </Td>
-                  <Td>{new Date(row.first_date).toLocaleDateString('en-IN')}</Td>
-                  <Td>{new Date(row.last_date).toLocaleDateString('en-IN')}</Td>
-                </tr>
-              ))}
             </Tbody>
           </Table>
         )}
