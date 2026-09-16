@@ -1,6 +1,7 @@
 import { createClient } from '@/lib/supabase/server'
 import { deriveArticleEngagementDuration, type RawSessionRecord, type ArticleEngagementRow } from '@/lib/sessionReport'
-import { NextResponse } from 'next/server'
+import { buildArticleEngagementExcel } from '@/lib/export'
+import { NextRequest, NextResponse } from 'next/server'
 import { isArticleRole } from '@/types/app'
 import type { PostgrestError } from '@supabase/supabase-js'
 
@@ -56,7 +57,16 @@ function extractAssignment(
 // realtime RPC bundle (useRealtimeDashboard). The Dashboard fetches this
 // only when the tile's modal is opened, same as
 // /api/dashboard/today-sessions.
-export async function GET() {
+//
+// ?format=xlsx  optional — returns the .xlsx export instead of { rows }.
+//               ?client=<text>  optional, only applies with format=xlsx —
+//               the same case-insensitive Client Name substring match the
+//               modal's search box applies client-side, so the export always
+//               matches what's currently filtered on screen. Both the JSON
+//               and xlsx paths call deriveArticleEngagementDuration() and
+//               then filter its output the same way — no separate
+//               calculation for Excel.
+export async function GET(req: NextRequest) {
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
@@ -108,5 +118,25 @@ export async function GET() {
 
   const rows: ArticleEngagementRow[] = deriveArticleEngagementDuration(records)
 
-  return NextResponse.json({ rows })
+  const { searchParams } = new URL(req.url)
+  if (searchParams.get('format') !== 'xlsx') {
+    return NextResponse.json({ rows })
+  }
+
+  const clientQuery = (searchParams.get('client') ?? '').trim().toLowerCase()
+  const exportRows  = clientQuery
+    ? rows.filter(r => r.client_name.toLowerCase().includes(clientQuery))
+    : rows
+
+  const buffer  = await buildArticleEngagementExcel(exportRows)
+  const todayIST = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' })
+  const safeClient = clientQuery ? clientQuery.replace(/[^a-zA-Z0-9]+/g, '_') : 'all_clients'
+  const filename = `article_engagement_duration_${safeClient}_${todayIST}.xlsx`
+
+  return new NextResponse(new Uint8Array(buffer), {
+    headers: {
+      'Content-Type':        'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      'Content-Disposition': `attachment; filename="${filename}"`,
+    },
+  })
 }

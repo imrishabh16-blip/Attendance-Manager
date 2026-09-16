@@ -1,5 +1,5 @@
 import ExcelJS from 'exceljs'
-import type { ClientWorkSlot } from '@/lib/sessionReport'
+import type { ClientWorkSlot, ArticleEngagementRow } from '@/lib/sessionReport'
 
 export interface StatusReportRow {
   article_name: string
@@ -296,6 +296,48 @@ export async function buildClientWorkDurationExcel(rows: ClientWorkSlot[]): Prom
   }
 
   ws.autoFilter = { from: 'A1', to: 'I1' }
+
+  const buffer = await wb.xlsx.writeBuffer()
+  return Buffer.from(buffer)
+}
+
+// Article Engagement Duration is cumulative (no sessions/slots/status), so
+// unlike buildSessionReportExcel / buildClientWorkDurationExcel there is no
+// status column or color coding here — just the six required columns.
+export async function buildArticleEngagementExcel(rows: ArticleEngagementRow[]): Promise<Buffer> {
+  const wb = new ExcelJS.Workbook()
+  wb.creator = 'CA Attendance Manager'
+  wb.created = new Date()
+
+  const ws = wb.addWorksheet('Article Engagement Duration', {
+    views: [{ state: 'frozen', ySplit: 1 }],
+  })
+
+  ws.columns = [
+    { header: 'Article Name',     key: 'article_name',     width: 28 },
+    { header: 'Client Name',      key: 'client_name',      width: 28 },
+    { header: 'Days Punched',     key: 'days_punched',     width: 14 },
+    { header: 'Hours Punched',    key: 'hours_punched',    width: 14 },
+    { header: 'First Attendance', key: 'first_attendance', width: 16 },
+    { header: 'Last Attendance',  key: 'last_attendance',  width: 16 },
+  ]
+
+  applyHeaderStyle(ws.getRow(1))
+
+  const fmtDate = (iso: string) => new Date(iso).toLocaleDateString('en-IN')
+
+  for (const row of rows) {
+    ws.addRow({
+      article_name:     row.article_name,
+      client_name:      row.client_name,
+      days_punched:     row.days_punched,
+      hours_punched:    row.hours_punched,
+      first_attendance: fmtDate(row.first_attendance),
+      last_attendance:  fmtDate(row.last_attendance),
+    })
+  }
+
+  ws.autoFilter = { from: 'A1', to: 'F1' }
 
   const buffer = await wb.xlsx.writeBuffer()
   return Buffer.from(buffer)
