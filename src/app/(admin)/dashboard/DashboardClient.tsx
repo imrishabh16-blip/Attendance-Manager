@@ -7,11 +7,12 @@ import { LiveActivityTable } from '@/components/dashboard/LiveActivityTable'
 import { Card, CardHeader, CardBody } from '@/components/ui/Card'
 import { Modal } from '@/components/ui/Modal'
 import { Table, Thead, Tbody, Th, Td } from '@/components/ui/Table'
-import { RefreshCw, UserCheck, UserX, Users, Layers, UserCog, ChevronDown, Search, Download, Loader2 } from 'lucide-react'
+import { RefreshCw, UserCheck, UserX, Users, Layers, UserCog, Clock, ChevronDown, Search, Download, Loader2 } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { cn, formatTime, workTypeBadgeColor } from '@/lib/utils'
 import { groupLiveActivityByReportingManager } from '@/lib/reportingWise'
 import type { TodaySessionItem } from '@/app/api/dashboard/today-sessions/route'
+import type { ArticleEngagementRow } from '@/lib/sessionReport'
 
 interface Props {
   profile: { id: string; full_name: string; role: string }
@@ -116,6 +117,50 @@ export default function DashboardClient({ profile: _, initialData }: Props) {
     () => groupLiveActivityByReportingManager(liveActivity),
     [liveActivity]
   )
+
+  // ── Article Engagement Duration modal — lazy loaded via server API ───────
+  // Historical (full attendance history), unlike the tiles above which are
+  // derived from liveActivity (today's open sessions only) — so this is
+  // fetched on demand rather than folded into useRealtimeDashboard's bundle.
+  const [articleEngagementOpen,    setArticleEngagementOpen]    = useState(false)
+  const [articleEngagementLoading, setArticleEngagementLoading] = useState(false)
+  const [articleEngagementRows,    setArticleEngagementRows]    = useState<ArticleEngagementRow[] | null>(null)
+  const [articleEngagementClient,  setArticleEngagementClient]  = useState('')
+  const [engagementClientQuery,    setEngagementClientQuery]    = useState('')
+
+  async function openArticleEngagementDuration() {
+    setArticleEngagementOpen(true)
+    setArticleEngagementLoading(true)
+    try {
+      const res = await fetch('/api/dashboard/article-engagement-duration')
+      if (res.ok) {
+        const { rows } = await res.json() as { rows: ArticleEngagementRow[] }
+        setArticleEngagementRows(rows)
+      }
+    } catch {
+      // Network failure — loading cleared, modal shows empty state
+    } finally {
+      setArticleEngagementLoading(false)
+    }
+  }
+
+  const articleEngagementCount = articleEngagementRows ? articleEngagementRows.length : '—'
+
+  // Client list for the filter — derived from the fetched rows themselves,
+  // not the clients master/autocomplete table, so it only ever offers
+  // clients that actually have Article engagement history.
+  const articleEngagementClients = useMemo(() => {
+    if (!articleEngagementRows) return []
+    return [...new Set(articleEngagementRows.map(r => r.client_name))].sort()
+  }, [articleEngagementRows])
+
+  const filteredEngagementClients = engagementClientQuery.trim()
+    ? articleEngagementClients.filter(c => c.toLowerCase().includes(engagementClientQuery.toLowerCase()))
+    : articleEngagementClients
+
+  const filteredArticleEngagementRows = articleEngagementClient
+    ? (articleEngagementRows ?? []).filter(r => r.client_name === articleEngagementClient)
+    : (articleEngagementRows ?? [])
 
   // ── On Leave modal ────────────────────────────────────────────────────────
   const [onLeaveOpen,   setOnLeaveOpen]   = useState(false)
@@ -241,6 +286,16 @@ export default function DashboardClient({ profile: _, initialData }: Props) {
               color="purple"
               wide
               onClick={() => setReportingWiseOpen(true)}
+            />
+
+            {/* Article Engagement Duration — full width, historical (lazy-loaded on open) */}
+            <MetricCard
+              label="Article Engagement Duration"
+              value={articleEngagementCount}
+              icon={Clock}
+              color="blue"
+              wide
+              onClick={openArticleEngagementDuration}
             />
 
             {/* Currently Checked In — collapsible */}
@@ -583,6 +638,101 @@ export default function DashboardClient({ profile: _, initialData }: Props) {
               })}
             </Tbody>
           </Table>
+        )}
+      </Modal>
+
+      {/* ── Article Engagement Duration modal ── */}
+      <Modal
+        open={articleEngagementOpen}
+        onClose={() => {
+          setArticleEngagementOpen(false)
+          setArticleEngagementClient('')
+          setEngagementClientQuery('')
+        }}
+        title="Article Engagement Duration"
+        className="sm:max-w-5xl"
+      >
+        {articleEngagementLoading ? (
+          <div className="space-y-2">
+            {[0, 1, 2].map(i => (
+              <div key={i} className="h-12 bg-brand-100 rounded-xl animate-pulse" />
+            ))}
+          </div>
+        ) : !articleEngagementRows || articleEngagementRows.length === 0 ? (
+          <p className="text-sm text-gray-400 text-center py-8">No article engagement found</p>
+        ) : (
+          <>
+            {/* Client filter — searchable/selectable, options derived from the fetched rows */}
+            <div className="mb-4 space-y-2">
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+                <input
+                  value={engagementClientQuery}
+                  onChange={e => setEngagementClientQuery(e.target.value)}
+                  placeholder="Search client..."
+                  className="w-full pl-9 pr-3 py-2.5 rounded-xl border border-brand-200 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500 bg-white"
+                />
+              </div>
+              <ul className="divide-y divide-brand-100 rounded-xl border border-brand-200 overflow-hidden max-h-36 overflow-y-auto">
+                <li>
+                  <button
+                    onClick={() => setArticleEngagementClient('')}
+                    className={cn(
+                      'w-full flex items-center px-4 py-2.5 text-left text-sm font-medium hover:bg-brand-50',
+                      !articleEngagementClient ? 'bg-brand-50 text-brand-700' : 'text-gray-900'
+                    )}
+                  >
+                    All Clients
+                  </button>
+                </li>
+                {filteredEngagementClients.map(c => (
+                  <li key={c}>
+                    <button
+                      onClick={() => setArticleEngagementClient(c)}
+                      className={cn(
+                        'w-full flex items-center px-4 py-2.5 text-left text-sm font-medium hover:bg-brand-50',
+                        articleEngagementClient === c ? 'bg-brand-50 text-brand-700' : 'text-gray-900'
+                      )}
+                    >
+                      {c}
+                    </button>
+                  </li>
+                ))}
+                {engagementClientQuery.trim() !== '' && filteredEngagementClients.length === 0 && (
+                  <li className="px-4 py-3 text-sm text-gray-400 text-center">No clients matched</li>
+                )}
+              </ul>
+            </div>
+
+            {filteredArticleEngagementRows.length === 0 ? (
+              <p className="text-sm text-gray-400 text-center py-8">No engagement rows for this client</p>
+            ) : (
+              <Table>
+                <Thead>
+                  <tr>
+                    <Th>Article Name</Th>
+                    <Th>Client Name</Th>
+                    <Th>Days Punched</Th>
+                    <Th>Hours Punched</Th>
+                    <Th>First Attendance</Th>
+                    <Th>Last Attendance</Th>
+                  </tr>
+                </Thead>
+                <Tbody>
+                  {filteredArticleEngagementRows.map((row, i) => (
+                    <tr key={`${row.article_id}-${row.client_name}-${i}`} className="hover:bg-brand-50">
+                      <Td>{row.article_name}</Td>
+                      <Td>{row.client_name}</Td>
+                      <Td>{row.days_punched}</Td>
+                      <Td>{row.hours_punched}</Td>
+                      <Td>{new Date(row.first_attendance).toLocaleDateString('en-IN')}</Td>
+                      <Td>{new Date(row.last_attendance).toLocaleDateString('en-IN')}</Td>
+                    </tr>
+                  ))}
+                </Tbody>
+              </Table>
+            )}
+          </>
         )}
       </Modal>
     </div>

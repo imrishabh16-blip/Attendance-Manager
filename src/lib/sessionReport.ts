@@ -186,3 +186,68 @@ export function deriveClientWorkDuration(records: RawSessionRecord[], todayIST: 
 
   return rows
 }
+
+export interface ArticleEngagementRow {
+  article_id:       string
+  article_name:     string
+  client_name:      string
+  days_punched:     number
+  hours_punched:    number
+  first_attendance: string
+  last_attendance:  string
+}
+
+// Derives Article Engagement Duration rows — one cumulative row per
+// (article, client) pair across all history. Deliberately does NOT go
+// through computeSlots: there is no inactivity-gap splitting and no
+// Active/Completed status here, because this report answers "how much has
+// this Article engaged with this Client in total", not "what are the
+// discrete work sessions". Grouping is keyed by article_id + client_name
+// (never assignment_id), so the same Article working the same Client under
+// different assignments/work types/departments still collapses into a
+// single row — mirrors the identity rule deriveClientWorkDuration already
+// applies at the client-only level.
+export function deriveArticleEngagementDuration(records: RawSessionRecord[]): ArticleEngagementRow[] {
+  const byArticleClient = new Map<string, RawSessionRecord[]>()
+  for (const r of records) {
+    const key = `${r.article_id}::${r.client_name}`
+    const list = byArticleClient.get(key) ?? []
+    list.push(r)
+    byArticleClient.set(key, list)
+  }
+
+  const rows: ArticleEngagementRow[] = []
+
+  for (const groupRecords of byArticleClient.values()) {
+    const { article_id, article_name, client_name } = groupRecords[0]
+
+    const dateSet = new Set(groupRecords.map(r => r.attendance_date))
+    let totalHours = 0
+    for (const r of groupRecords) {
+      if (r.checked_out_at) {
+        totalHours +=
+          (new Date(r.checked_out_at).getTime() - new Date(r.checked_in_at).getTime()) /
+          3_600_000
+      }
+    }
+
+    const sortedDates = [...dateSet].sort()
+
+    rows.push({
+      article_id,
+      article_name,
+      client_name,
+      days_punched:     dateSet.size,
+      hours_punched:    Math.round(totalHours * 10) / 10,
+      first_attendance: sortedDates[0],
+      last_attendance:  sortedDates[sortedDates.length - 1],
+    })
+  }
+
+  rows.sort((a, b) =>
+    a.client_name.localeCompare(b.client_name) ||
+    a.article_name.localeCompare(b.article_name)
+  )
+
+  return rows
+}
