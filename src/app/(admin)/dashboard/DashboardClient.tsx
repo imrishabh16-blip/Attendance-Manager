@@ -4,15 +4,16 @@ import { useState, useMemo, Fragment } from 'react'
 import { useRealtimeDashboard, type DashboardInitialData } from '@/hooks/useRealtimeDashboard'
 import { MetricCard } from '@/components/dashboard/MetricCard'
 import { LiveActivityTable } from '@/components/dashboard/LiveActivityTable'
-import { ArticleAnalyticsSection } from '@/components/dashboard/ArticleAnalyticsSection'
+import { Button } from '@/components/ui/Button'
 import { Card, CardHeader, CardBody } from '@/components/ui/Card'
 import { Modal } from '@/components/ui/Modal'
 import { Table, Thead, Tbody, Th, Td } from '@/components/ui/Table'
-import { RefreshCw, UserCheck, UserX, Users, Layers, UserCog, ChevronDown, Search, Download, Loader2 } from 'lucide-react'
+import { RefreshCw, UserCheck, UserX, Users, Layers, UserCog, Clock, ChevronDown, Search, Download, Loader2 } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { cn, formatTime, workTypeBadgeColor } from '@/lib/utils'
 import { groupLiveActivityByReportingManager } from '@/lib/reportingWise'
 import type { TodaySessionItem } from '@/app/api/dashboard/today-sessions/route'
+import type { ArticleEngagementRow } from '@/lib/workDuration'
 
 interface Props {
   profile: { id: string; full_name: string; role: string }
@@ -37,7 +38,7 @@ function ModalSearch({ value, onChange }: { value: string; onChange: (v: string)
 }
 
 export default function DashboardClient({ profile: _, initialData }: Props) {
-  const { summary, liveActivity, onLeaveArticles, awolArticles, totalArticles, loading, refresh } = useRealtimeDashboard(initialData)
+  const { summary, liveActivity, onLeaveArticles, awolArticles, loading, refresh } = useRealtimeDashboard(initialData)
 
   const s = summary
 
@@ -117,6 +118,88 @@ export default function DashboardClient({ profile: _, initialData }: Props) {
     () => groupLiveActivityByReportingManager(liveActivity),
     [liveActivity]
   )
+
+  // ── Client Engagement ribbon + modal — lazy loaded via server API ───────────
+  // Historical, unlike the tiles above which are derived from liveActivity
+  // (today's open sessions only) — so nothing is fetched on dashboard load.
+  // The user picks a Start Date and clicks Generate; the server then bounds
+  // one query to Start Date → today and returns one aggregated row per
+  // article, shown in a modal instead of on the dashboard itself.
+  const todayIST = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' })
+
+  const [engagementStartDate,     setEngagementStartDate]     = useState('')
+  // The Start Date the rows below were generated for — the picker can change
+  // afterwards, but the modal label and Excel export must stay in step with
+  // the rows actually on screen.
+  const [engagementGeneratedFrom, setEngagementGeneratedFrom] = useState('')
+  const [engagementOpen,          setEngagementOpen]          = useState(false)
+  const [engagementLoading,       setEngagementLoading]       = useState(false)
+  const [engagementRows,          setEngagementRows]          = useState<ArticleEngagementRow[] | null>(null)
+  const [engagementQuery,         setEngagementQuery]         = useState('')
+  const [engagementExporting,     setEngagementExporting]     = useState(false)
+
+  async function generateArticleEngagement() {
+    if (!engagementStartDate) return
+    const startDate = engagementStartDate
+
+    setEngagementGeneratedFrom(startDate)
+    setEngagementQuery('')
+    setEngagementRows(null)
+    setEngagementOpen(true)
+    setEngagementLoading(true)
+    try {
+      const res = await fetch(`/api/dashboard/article-engagement-duration?${new URLSearchParams({ start_date: startDate })}`)
+      if (!res.ok) throw new Error('Request failed')
+      const { rows } = await res.json() as { rows: ArticleEngagementRow[] }
+      setEngagementRows(rows)
+    } catch {
+      toast.error('Failed to generate Client Engagement')
+      setEngagementOpen(false)
+    } finally {
+      setEngagementLoading(false)
+    }
+  }
+
+  const engagementCount = engagementRows ? engagementRows.length : '—'
+
+  // The search box is the only filter — a plain case-insensitive substring
+  // match on Article Name or Last Punched Client against the rows already
+  // fetched above. Blank query shows every row.
+  const engagementNeedle = engagementQuery.trim().toLowerCase()
+  const filteredEngagementRows = engagementNeedle
+    ? (engagementRows ?? []).filter(r =>
+        r.article_name.toLowerCase().includes(engagementNeedle) ||
+        r.last_punched_client.toLowerCase().includes(engagementNeedle)
+      )
+    : (engagementRows ?? [])
+
+  // Exports exactly what's currently filtered on screen — same Start Date the
+  // rows were generated for, same substring sent as ?q= and resolved
+  // server-side against the identical deriveArticleEngagementDuration()
+  // output the modal fetched (see /api/dashboard/article-engagement-duration).
+  // No separate calculation for Excel.
+  async function downloadArticleEngagementExcel() {
+    setEngagementExporting(true)
+    try {
+      const params = new URLSearchParams({ start_date: engagementGeneratedFrom, format: 'xlsx' })
+      if (engagementNeedle) params.set('q', engagementQuery.trim())
+
+      const res = await fetch(`/api/dashboard/article-engagement-duration?${params}`)
+      if (!res.ok) { toast.error('Export failed'); return }
+
+      const blob = await res.blob()
+      const url  = URL.createObjectURL(blob)
+      const a    = document.createElement('a')
+      a.href     = url
+      a.download = `client_engagement_${engagementGeneratedFrom}_to_${todayIST}.xlsx`
+      a.click()
+      URL.revokeObjectURL(url)
+    } catch {
+      toast.error('Export failed')
+    } finally {
+      setEngagementExporting(false)
+    }
+  }
 
   // ── On Leave modal ────────────────────────────────────────────────────────
   const [onLeaveOpen,   setOnLeaveOpen]   = useState(false)
@@ -244,8 +327,37 @@ export default function DashboardClient({ profile: _, initialData }: Props) {
               onClick={() => setReportingWiseOpen(true)}
             />
 
-            {/* Article Analytics — the article-wise table fetches only after a Start Date is picked */}
-            <ArticleAnalyticsSection total={totalArticles} />
+            {/* Client Engagement — full width, historical: nothing is
+                fetched until a Start Date is picked and Generate is clicked */}
+            <MetricCard
+              label="Client Engagement"
+              value={engagementCount}
+              icon={Clock}
+              color="blue"
+              wide
+              action={
+                <>
+                  <label htmlFor="engagement-start-date" className="text-xs font-medium text-gray-500">
+                    Start Date
+                  </label>
+                  <input
+                    id="engagement-start-date"
+                    type="date"
+                    value={engagementStartDate}
+                    max={todayIST}
+                    onChange={e => setEngagementStartDate(e.target.value)}
+                    className="px-3 py-2 rounded-xl border border-brand-200 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-brand-500"
+                  />
+                  <Button
+                    onClick={generateArticleEngagement}
+                    loading={engagementLoading}
+                    disabled={!engagementStartDate}
+                  >
+                    Generate
+                  </Button>
+                </>
+              }
+            />
 
             {/* Currently Checked In — collapsible */}
             <Card>
@@ -587,6 +699,85 @@ export default function DashboardClient({ profile: _, initialData }: Props) {
               })}
             </Tbody>
           </Table>
+        )}
+      </Modal>
+
+      {/* ── Client Engagement modal ── */}
+      <Modal
+        open={engagementOpen}
+        onClose={() => {
+          setEngagementOpen(false)
+          setEngagementQuery('')
+        }}
+        title="Client Engagement"
+        className="sm:max-w-3xl"
+      >
+        {engagementLoading ? (
+          <div className="space-y-2">
+            {[0, 1, 2].map(i => (
+              <div key={i} className="h-12 bg-brand-100 rounded-xl animate-pulse" />
+            ))}
+          </div>
+        ) : !engagementRows || engagementRows.length === 0 ? (
+          <p className="text-sm text-gray-400 text-center py-8">No article engagement found from this date</p>
+        ) : (
+          <>
+            <p className="text-xs text-gray-400 mb-3">
+              {new Date(engagementGeneratedFrom).toLocaleDateString('en-IN')} – {new Date(todayIST).toLocaleDateString('en-IN')}
+            </p>
+
+            {/* Search + export — search narrows the table below, export
+                downloads exactly what's currently filtered */}
+            <div className="flex flex-col sm:flex-row gap-2 mb-4">
+              <div className="relative flex-1">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+                <input
+                  value={engagementQuery}
+                  onChange={e => setEngagementQuery(e.target.value)}
+                  placeholder="Search article or client..."
+                  className="w-full pl-9 pr-3 py-2.5 rounded-xl border border-brand-200 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500 bg-white"
+                />
+              </div>
+              <button
+                onClick={downloadArticleEngagementExcel}
+                disabled={engagementExporting}
+                className="inline-flex items-center justify-center gap-2 px-4 py-2.5 text-sm font-medium bg-white text-brand-700 border border-brand-200 hover:bg-brand-50 rounded-xl transition-colors disabled:opacity-50 shrink-0"
+              >
+                {engagementExporting
+                  ? <Loader2 className="h-4 w-4 animate-spin" />
+                  : <Download className="h-4 w-4" />
+                }
+                Export Excel
+              </button>
+            </div>
+
+            {filteredEngagementRows.length === 0 ? (
+              <p className="text-sm text-gray-400 text-center py-8">No matching articles</p>
+            ) : (
+              <Table>
+                <Thead>
+                  <tr>
+                    <Th>Article Name</Th>
+                    <Th>Last Punched Client</Th>
+                    <Th>Days</Th>
+                    <Th>First Attendance</Th>
+                    <Th>Last Attendance</Th>
+                  </tr>
+                </Thead>
+                <Tbody>
+                  {filteredEngagementRows.map(row => (
+                    <tr key={row.article_id} className="hover:bg-brand-50">
+                      <Td>{row.article_name}</Td>
+                      <Td>{row.last_punched_client}</Td>
+                      <Td>{row.days}</Td>
+                      <Td>{new Date(row.first_attendance).toLocaleDateString('en-IN')}</Td>
+                      <Td>{new Date(row.last_attendance).toLocaleDateString('en-IN')}</Td>
+                    </tr>
+                  ))}
+                </Tbody>
+              </Table>
+            )}
+          </>
         )}
       </Modal>
     </div>

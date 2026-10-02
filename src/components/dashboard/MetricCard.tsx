@@ -13,6 +13,10 @@ interface MetricCardProps {
   // Icon-beside-text instead of icon-above-text, for a full-width bar rather
   // than a grid cell. Same tokens (bg/border/shadow/typography) either way.
   wide?: boolean
+  // Controls rendered at the trailing edge of the card (e.g. a date picker +
+  // button). Not combinable with onClick/href — interactive controls can't
+  // live inside the card's own <button>/<Link> wrapper.
+  action?: React.ReactNode
 }
 
 const colors = {
@@ -24,12 +28,13 @@ const colors = {
   gray:   { bg: 'bg-gray-100',  icon: 'text-gray-500',   value: 'text-gray-700' },
 }
 
-export function MetricCard({ label, value, icon: Icon, color = 'blue', alert, href, onClick, wide }: MetricCardProps) {
+export function MetricCard({ label, value, icon: Icon, color = 'blue', alert, href, onClick, wide, action }: MetricCardProps) {
   const c = colors[color]
   const card = (
     <div className={cn(
       'bg-white rounded-2xl border border-brand-200 shadow-sm p-4 flex gap-3',
       wide ? 'flex-row items-center' : 'flex-col',
+      action && 'flex-wrap',
       alert && 'ring-2 ring-red-300',
       (href || onClick) && 'cursor-pointer hover:shadow-md transition-shadow'
     )}>
@@ -40,6 +45,7 @@ export function MetricCard({ label, value, icon: Icon, color = 'blue', alert, hr
         <p className={cn('text-2xl font-bold', c.value)}>{value}</p>
         <p className="text-xs text-gray-500 mt-0.5">{label}</p>
       </div>
+      {action && <div className="sm:ml-auto flex items-center gap-2 flex-wrap">{action}</div>}
     </div>
   )
 

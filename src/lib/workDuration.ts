@@ -1,5 +1,5 @@
 // One attendance record, flattened with its article and client names. Shared
-// input shape for Client Work Duration and Article Analytics — see
+// input shape for Client Work Duration and Client Engagement — see
 // lib/attendanceRecords.ts for the query that produces it.
 export interface RawSessionRecord {
   article_id:      string
@@ -135,19 +135,28 @@ export function deriveClientWorkDuration(records: RawSessionRecord[], todayIST: 
   return rows
 }
 
-export interface ArticleAnalyticsRow {
-  article_id:     string
-  article_name:   string
-  clients_worked: number
-  days_worked:    number
-  hours_worked:   number
+export interface ArticleEngagementRow {
+  article_id:          string
+  article_name:        string
+  last_punched_client: string
+  days:                number
+  first_attendance:    string
+  last_attendance:     string
 }
 
-// Derives Article Analytics rows — one row per article, covering only the
-// records passed in (the caller bounds these to attendance on/after the
-// selected Start Date). Like deriveClientWorkDuration, this is cumulative:
-// no inactivity-gap splitting and no Active/Completed status, just totals.
-export function deriveArticleAnalytics(records: RawSessionRecord[]): ArticleAnalyticsRow[] {
+// Derives Client Engagement rows — one cumulative row per article
+// over whatever records the caller passes in (the API bounds these to
+// attendance from the selected Start Date through today). Deliberately does
+// NOT go through computeSlots: there is no inactivity-gap splitting and no
+// Active/Completed status, because this answers "how long has this Article
+// been engaged with clients", not "what are the discrete work slots".
+//
+// Same boundary as Client Work Duration: only client-assigned attendance
+// feeds RawSessionRecord, and clients are identified by client_name (never
+// assignment_id), so the same client under different work types is one
+// client. "Last Punched Client" is the client of the article's most recent
+// check-in in the range.
+export function deriveArticleEngagementDuration(records: RawSessionRecord[]): ArticleEngagementRow[] {
   const byArticle = new Map<string, RawSessionRecord[]>()
   for (const r of records) {
     const list = byArticle.get(r.article_id) ?? []
@@ -155,26 +164,23 @@ export function deriveArticleAnalytics(records: RawSessionRecord[]): ArticleAnal
     byArticle.set(r.article_id, list)
   }
 
-  const rows: ArticleAnalyticsRow[] = []
+  const rows: ArticleEngagementRow[] = []
 
   for (const articleRecords of byArticle.values()) {
     const { article_id, article_name } = articleRecords[0]
 
-    let totalHours = 0
-    for (const r of articleRecords) {
-      if (r.checked_out_at) {
-        totalHours +=
-          (new Date(r.checked_out_at).getTime() - new Date(r.checked_in_at).getTime()) /
-          3_600_000
-      }
-    }
+    const sortedDates = [...new Set(articleRecords.map(r => r.attendance_date))].sort()
+    const lastPunch = articleRecords.reduce((latest, r) =>
+      new Date(r.checked_in_at).getTime() >= new Date(latest.checked_in_at).getTime() ? r : latest
+    )
 
     rows.push({
       article_id,
       article_name,
-      clients_worked: new Set(articleRecords.map(r => r.client_name)).size,
-      days_worked:    new Set(articleRecords.map(r => r.attendance_date)).size,
-      hours_worked:   Math.round(totalHours * 10) / 10,
+      last_punched_client: lastPunch.client_name,
+      days:                sortedDates.length,
+      first_attendance:    sortedDates[0],
+      last_attendance:     sortedDates[sortedDates.length - 1],
     })
   }
 

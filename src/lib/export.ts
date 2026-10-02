@@ -1,5 +1,5 @@
 import ExcelJS from 'exceljs'
-import type { ClientWorkSlot } from '@/lib/workDuration'
+import type { ClientWorkSlot, ArticleEngagementRow } from '@/lib/workDuration'
 
 export interface StatusReportRow {
   article_name: string
@@ -227,6 +227,46 @@ export async function buildClientWorkDurationExcel(rows: ClientWorkSlot[]): Prom
   }
 
   ws.autoFilter = { from: 'A1', to: 'I1' }
+
+  const buffer = await wb.xlsx.writeBuffer()
+  return Buffer.from(buffer)
+}
+
+// Client Engagement is cumulative (no slots/status), so unlike
+// buildClientWorkDurationExcel there is no status column or color coding —
+// just the five columns shown in the dashboard modal.
+export async function buildArticleEngagementExcel(rows: ArticleEngagementRow[]): Promise<Buffer> {
+  const wb = new ExcelJS.Workbook()
+  wb.creator = 'CA Attendance Manager'
+  wb.created = new Date()
+
+  const ws = wb.addWorksheet('Client Engagement', {
+    views: [{ state: 'frozen', ySplit: 1 }],
+  })
+
+  ws.columns = [
+    { header: 'Article Name',         key: 'article_name',        width: 28 },
+    { header: 'Last Punched Client',  key: 'last_punched_client', width: 30 },
+    { header: 'Days',                 key: 'days',                width: 10 },
+    { header: 'First Attendance',     key: 'first_attendance',    width: 16 },
+    { header: 'Last Attendance',      key: 'last_attendance',     width: 16 },
+  ]
+
+  applyHeaderStyle(ws.getRow(1))
+
+  const fmtDate = (iso: string) => new Date(iso).toLocaleDateString('en-IN')
+
+  for (const row of rows) {
+    ws.addRow({
+      article_name:        row.article_name,
+      last_punched_client: row.last_punched_client,
+      days:                row.days,
+      first_attendance:    fmtDate(row.first_attendance),
+      last_attendance:     fmtDate(row.last_attendance),
+    })
+  }
+
+  ws.autoFilter = { from: 'A1', to: 'E1' }
 
   const buffer = await wb.xlsx.writeBuffer()
   return Buffer.from(buffer)

@@ -2,14 +2,13 @@
 
 import { useEffect, useState, useCallback, useRef } from 'react'
 import { getSupabaseBrowserClient } from '@/lib/supabase/client'
-import { ARTICLE_ROLES, type DashboardSummary, type LiveActivityRow, type OnLeaveArticleRow } from '@/types/app'
+import type { DashboardSummary, LiveActivityRow, OnLeaveArticleRow } from '@/types/app'
 
 export interface DashboardInitialData {
   summary:         DashboardSummary | null
   liveActivity:    LiveActivityRow[]
   onLeaveArticles: OnLeaveArticleRow[]
   awolArticles:    OnLeaveArticleRow[]
-  totalArticles:   number
 }
 
 export function useRealtimeDashboard(initialData?: DashboardInitialData) {
@@ -19,7 +18,6 @@ export function useRealtimeDashboard(initialData?: DashboardInitialData) {
   const [liveActivity, setLive]       = useState<LiveActivityRow[]>(initialData?.liveActivity ?? [])
   const [onLeaveArticles, setOnLeave] = useState<OnLeaveArticleRow[]>(initialData?.onLeaveArticles ?? [])
   const [awolArticles, setAwol]       = useState<OnLeaveArticleRow[]>(initialData?.awolArticles ?? [])
-  const [totalArticles, setTotal]     = useState(initialData?.totalArticles ?? 0)
   const [loading, setLoading]         = useState(!initialData)
   const timerRef                      = useRef<ReturnType<typeof setTimeout> | null>(null)
   // Captured once so the mount effect below can skip its initial refresh()
@@ -28,19 +26,17 @@ export function useRealtimeDashboard(initialData?: DashboardInitialData) {
   const hasInitialData                = useRef(!!initialData)
 
   const refresh = useCallback(async () => {
-    const [summaryRes, liveRes, onLeaveRes, awolRes, totalRes] = await Promise.all([
+    const [summaryRes, liveRes, onLeaveRes, awolRes] = await Promise.all([
       supabase.rpc('get_dashboard_summary'),
       supabase.rpc('get_live_activity'),
       supabase.rpc('get_on_leave_articles'),
       supabase.rpc('get_awol_articles'),
-      supabase.from('profiles').select('id', { count: 'exact', head: true }).in('role', ARTICLE_ROLES).eq('status', 'active'),
     ])
 
     if (summaryRes.data)  setSummary(summaryRes.data as DashboardSummary)
     if (liveRes.data)     setLive(liveRes.data as LiveActivityRow[])
     if (onLeaveRes.data)  setOnLeave(onLeaveRes.data as OnLeaveArticleRow[])
     if (awolRes.data)     setAwol(awolRes.data as OnLeaveArticleRow[])
-    if (totalRes.count !== null) setTotal(totalRes.count)
     setLoading(false)
   }, [supabase])
 
@@ -54,7 +50,7 @@ export function useRealtimeDashboard(initialData?: DashboardInitialData) {
 
   useEffect(() => {
     // Server already fetched this for initial render — only fetch here if
-    // that didn't happen, so mount never duplicates the same queries.
+    // that didn't happen, so mount never duplicates the same 4 RPCs.
     if (!hasInitialData.current) refresh()
 
     const channel = supabase
@@ -70,5 +66,5 @@ export function useRealtimeDashboard(initialData?: DashboardInitialData) {
     }
   }, [refresh, handleChange, supabase])
 
-  return { summary, liveActivity, onLeaveArticles, awolArticles, totalArticles, loading, refresh }
+  return { summary, liveActivity, onLeaveArticles, awolArticles, loading, refresh }
 }

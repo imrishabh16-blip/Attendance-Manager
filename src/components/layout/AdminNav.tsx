@@ -5,7 +5,8 @@ import { usePathname, useRouter } from 'next/navigation'
 import { getSupabaseBrowserClient } from '@/lib/supabase/client'
 import { cn } from '@/lib/utils'
 import {
-  LayoutDashboard, Briefcase, Users, FileText, Clock, LogOut, GraduationCap
+  LayoutDashboard, Briefcase, Users, FileText, Clock, LogOut, GraduationCap, BarChart3,
+  type LucideIcon
 } from 'lucide-react'
 import type { UserRole } from '@/types/app'
 
@@ -13,13 +14,25 @@ interface Props {
   profile: { full_name: string; role: UserRole }
 }
 
-const navItems = [
+interface NavItem {
+  href:  string
+  label: string
+  icon:  LucideIcon
+  roles: UserRole[]
+  // Shown in the desktop sidebar only. The mobile bottom bar gives every item
+  // an equal slice of the width, so a seventh label would crowd it; there is
+  // no overflow/"More" menu to tuck it into.
+  desktopOnly?: boolean
+}
+
+const navItems: NavItem[] = [
   { href: '/dashboard',              label: 'Dashboard',              icon: LayoutDashboard, roles: ['admin', 'partner', 'manager'] as UserRole[] },
   { href: '/assignments',            label: 'Assignments',            icon: Briefcase,       roles: ['admin', 'partner', 'manager'] as UserRole[] },
   { href: '/articles',               label: 'Articles',               icon: GraduationCap,   roles: ['admin', 'partner', 'manager'] as UserRole[] },
   { href: '/users',                  label: 'Users',                  icon: Users,           roles: ['admin'] as UserRole[] },
   { href: '/reports',                label: 'Reports',                icon: FileText,        roles: ['admin', 'partner', 'manager'] as UserRole[] },
   { href: '/client-work-duration',   label: 'Client Work Duration',   icon: Clock,           roles: ['admin', 'partner', 'manager'] as UserRole[] },
+  { href: '/article-analytics',      label: 'Article Analytics',      icon: BarChart3,       roles: ['admin', 'partner', 'manager'] as UserRole[], desktopOnly: true },
 ]
 
 export default function AdminNav({ profile }: Props) {
@@ -32,7 +45,8 @@ export default function AdminNav({ profile }: Props) {
     router.replace('/login')
   }
 
-  const visible = navItems.filter(n => n.roles.includes(profile.role))
+  const visible       = navItems.filter(n => n.roles.includes(profile.role))
+  const visibleMobile = visible.filter(n => !n.desktopOnly)
 
   return (
     <>
@@ -102,7 +116,7 @@ export default function AdminNav({ profile }: Props) {
       {/* Mobile bottom nav */}
       <nav className="sm:hidden fixed bottom-0 inset-x-0 bg-white border-t border-brand-200 z-40 safe-bottom">
         <div className="flex">
-          {visible.map(item => (
+          {visibleMobile.map(item => (
             <Link
               key={item.href}
               href={item.href}
