@@ -1,7 +1,7 @@
 import { redirect } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
 import DashboardClient from './DashboardClient'
-import { isArticleRole } from '@/types/app'
+import { ARTICLE_ROLES, isArticleRole } from '@/types/app'
 import type { DashboardSummary, LiveActivityRow, OnLeaveArticleRow } from '@/types/app'
 
 export default async function DashboardPage() {
@@ -18,11 +18,12 @@ export default async function DashboardPage() {
   if (!profile || profile.status !== 'active') redirect(profile?.status === 'deactivated' ? '/deactivated' : '/awaiting')
   if (isArticleRole(profile.role)) redirect('/attend')
 
-  const [summaryRes, liveRes, onLeaveRes, awolRes] = await Promise.all([
+  const [summaryRes, liveRes, onLeaveRes, awolRes, totalRes] = await Promise.all([
     supabase.rpc('get_dashboard_summary'),
     supabase.rpc('get_live_activity'),
     supabase.rpc('get_on_leave_articles'),
     supabase.rpc('get_awol_articles'),
+    supabase.from('profiles').select('id', { count: 'exact', head: true }).in('role', ARTICLE_ROLES).eq('status', 'active'),
   ])
 
   return (
@@ -33,6 +34,7 @@ export default async function DashboardPage() {
         liveActivity:    (liveRes.data ?? [])      as LiveActivityRow[],
         onLeaveArticles: (onLeaveRes.data ?? [])   as OnLeaveArticleRow[],
         awolArticles:    (awolRes.data ?? [])      as OnLeaveArticleRow[],
+        totalArticles:   totalRes.count ?? 0,
       }}
     />
   )

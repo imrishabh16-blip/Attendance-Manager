@@ -34,18 +34,6 @@ export default function ReportsLoading() {
             <div className="h-10 w-52 bg-brand-100 rounded-xl animate-pulse" />
           </div>
         </div>
-
-        {/* Assignment Activity card */}
-        <div className="bg-white rounded-2xl border border-brand-200 shadow-sm overflow-hidden">
-          <div className="px-5 py-4 border-b border-brand-200">
-            <div className="h-4 w-52 bg-brand-100 rounded animate-pulse" />
-          </div>
-          <div className="px-5 py-4 space-y-4">
-            <div className="h-3.5 w-full bg-brand-100 rounded animate-pulse" />
-            <div className="h-3.5 w-3/4 bg-brand-100 rounded animate-pulse" />
-            <div className="h-10 w-56 bg-brand-100 rounded-xl animate-pulse" />
-          </div>
-        </div>
       </div>
     </div>
   )

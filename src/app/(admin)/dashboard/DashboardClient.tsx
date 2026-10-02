@@ -4,15 +4,15 @@ import { useState, useMemo, Fragment } from 'react'
 import { useRealtimeDashboard, type DashboardInitialData } from '@/hooks/useRealtimeDashboard'
 import { MetricCard } from '@/components/dashboard/MetricCard'
 import { LiveActivityTable } from '@/components/dashboard/LiveActivityTable'
+import { ArticleAnalyticsSection } from '@/components/dashboard/ArticleAnalyticsSection'
 import { Card, CardHeader, CardBody } from '@/components/ui/Card'
 import { Modal } from '@/components/ui/Modal'
 import { Table, Thead, Tbody, Th, Td } from '@/components/ui/Table'
-import { RefreshCw, UserCheck, UserX, Users, Layers, UserCog, Clock, ChevronDown, Search, Download, Loader2 } from 'lucide-react'
+import { RefreshCw, UserCheck, UserX, Users, Layers, UserCog, ChevronDown, Search, Download, Loader2 } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { cn, formatTime, workTypeBadgeColor } from '@/lib/utils'
 import { groupLiveActivityByReportingManager } from '@/lib/reportingWise'
 import type { TodaySessionItem } from '@/app/api/dashboard/today-sessions/route'
-import type { ArticleEngagementRow } from '@/lib/sessionReport'
 
 interface Props {
   profile: { id: string; full_name: string; role: string }
@@ -37,7 +37,7 @@ function ModalSearch({ value, onChange }: { value: string; onChange: (v: string)
 }
 
 export default function DashboardClient({ profile: _, initialData }: Props) {
-  const { summary, liveActivity, onLeaveArticles, awolArticles, loading, refresh } = useRealtimeDashboard(initialData)
+  const { summary, liveActivity, onLeaveArticles, awolArticles, totalArticles, loading, refresh } = useRealtimeDashboard(initialData)
 
   const s = summary
 
@@ -117,74 +117,6 @@ export default function DashboardClient({ profile: _, initialData }: Props) {
     () => groupLiveActivityByReportingManager(liveActivity),
     [liveActivity]
   )
-
-  // ── Article Engagement Duration modal — lazy loaded via server API ───────
-  // Historical (full attendance history), unlike the tiles above which are
-  // derived from liveActivity (today's open sessions only) — so this is
-  // fetched on demand rather than folded into useRealtimeDashboard's bundle.
-  const [articleEngagementOpen,      setArticleEngagementOpen]      = useState(false)
-  const [articleEngagementLoading,   setArticleEngagementLoading]   = useState(false)
-  const [articleEngagementRows,      setArticleEngagementRows]      = useState<ArticleEngagementRow[] | null>(null)
-  const [engagementClientQuery,      setEngagementClientQuery]      = useState('')
-  const [articleEngagementExporting, setArticleEngagementExporting] = useState(false)
-
-  async function openArticleEngagementDuration() {
-    setArticleEngagementOpen(true)
-    setArticleEngagementLoading(true)
-    try {
-      const res = await fetch('/api/dashboard/article-engagement-duration')
-      if (res.ok) {
-        const { rows } = await res.json() as { rows: ArticleEngagementRow[] }
-        setArticleEngagementRows(rows)
-      }
-    } catch {
-      // Network failure — loading cleared, modal shows empty state
-    } finally {
-      setArticleEngagementLoading(false)
-    }
-  }
-
-  const articleEngagementCount = articleEngagementRows ? articleEngagementRows.length : '—'
-
-  // The search box is the only filter — a plain case-insensitive Client Name
-  // substring match against the rows already fetched above. Blank query
-  // shows every row.
-  const filteredArticleEngagementRows = engagementClientQuery.trim()
-    ? (articleEngagementRows ?? []).filter(r =>
-        r.client_name.toLowerCase().includes(engagementClientQuery.trim().toLowerCase())
-      )
-    : (articleEngagementRows ?? [])
-
-  // Exports exactly what's currently filtered on screen — same substring
-  // sent as ?client= and resolved server-side against the identical
-  // deriveArticleEngagementDuration() output the modal already fetched
-  // (see /api/dashboard/article-engagement-duration). No separate
-  // calculation for Excel.
-  async function downloadArticleEngagementExcel() {
-    setArticleEngagementExporting(true)
-    try {
-      const query = engagementClientQuery.trim()
-      const params = new URLSearchParams({ format: 'xlsx' })
-      if (query) params.set('client', query)
-
-      const res = await fetch(`/api/dashboard/article-engagement-duration?${params}`)
-      if (!res.ok) { toast.error('Export failed'); return }
-
-      const today = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' })
-      const safeClient = query ? query.replace(/[^a-zA-Z0-9]+/g, '_') : 'all_clients'
-      const blob = await res.blob()
-      const url  = URL.createObjectURL(blob)
-      const a    = document.createElement('a')
-      a.href     = url
-      a.download = `article_engagement_duration_${safeClient}_${today}.xlsx`
-      a.click()
-      URL.revokeObjectURL(url)
-    } catch {
-      toast.error('Export failed')
-    } finally {
-      setArticleEngagementExporting(false)
-    }
-  }
 
   // ── On Leave modal ────────────────────────────────────────────────────────
   const [onLeaveOpen,   setOnLeaveOpen]   = useState(false)
@@ -312,15 +244,8 @@ export default function DashboardClient({ profile: _, initialData }: Props) {
               onClick={() => setReportingWiseOpen(true)}
             />
 
-            {/* Article Engagement Duration — full width, historical (lazy-loaded on open) */}
-            <MetricCard
-              label="Article Engagement Duration"
-              value={articleEngagementCount}
-              icon={Clock}
-              color="blue"
-              wide
-              onClick={openArticleEngagementDuration}
-            />
+            {/* Article Analytics — the article-wise table fetches only after a Start Date is picked */}
+            <ArticleAnalyticsSection total={totalArticles} />
 
             {/* Currently Checked In — collapsible */}
             <Card>
@@ -662,83 +587,6 @@ export default function DashboardClient({ profile: _, initialData }: Props) {
               })}
             </Tbody>
           </Table>
-        )}
-      </Modal>
-
-      {/* ── Article Engagement Duration modal ── */}
-      <Modal
-        open={articleEngagementOpen}
-        onClose={() => {
-          setArticleEngagementOpen(false)
-          setEngagementClientQuery('')
-        }}
-        title="Article Engagement Duration"
-        className="sm:max-w-5xl"
-      >
-        {articleEngagementLoading ? (
-          <div className="space-y-2">
-            {[0, 1, 2].map(i => (
-              <div key={i} className="h-12 bg-brand-100 rounded-xl animate-pulse" />
-            ))}
-          </div>
-        ) : !articleEngagementRows || articleEngagementRows.length === 0 ? (
-          <p className="text-sm text-gray-400 text-center py-8">No article engagement found</p>
-        ) : (
-          <>
-            {/* Client Name filter + export — search narrows the table below,
-                export downloads exactly what's currently filtered */}
-            <div className="flex flex-col sm:flex-row gap-2 mb-4">
-              <div className="relative flex-1">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
-                <input
-                  value={engagementClientQuery}
-                  onChange={e => setEngagementClientQuery(e.target.value)}
-                  placeholder="Search client..."
-                  className="w-full pl-9 pr-3 py-2.5 rounded-xl border border-brand-200 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500 bg-white"
-                />
-              </div>
-              <button
-                onClick={downloadArticleEngagementExcel}
-                disabled={articleEngagementExporting}
-                className="inline-flex items-center justify-center gap-2 px-4 py-2.5 text-sm font-medium bg-white text-brand-700 border border-brand-200 hover:bg-brand-50 rounded-xl transition-colors disabled:opacity-50 shrink-0"
-              >
-                {articleEngagementExporting
-                  ? <Loader2 className="h-4 w-4 animate-spin" />
-                  : <Download className="h-4 w-4" />
-                }
-                Export Excel
-              </button>
-            </div>
-
-            {filteredArticleEngagementRows.length === 0 ? (
-              <p className="text-sm text-gray-400 text-center py-8">No engagement rows for this client</p>
-            ) : (
-              <Table>
-                <Thead>
-                  <tr>
-                    <Th>Article Name</Th>
-                    <Th>Client Name</Th>
-                    <Th>Days Punched</Th>
-                    <Th>Hours Punched</Th>
-                    <Th>First Attendance</Th>
-                    <Th>Last Attendance</Th>
-                  </tr>
-                </Thead>
-                <Tbody>
-                  {filteredArticleEngagementRows.map((row, i) => (
-                    <tr key={`${row.article_id}-${row.client_name}-${i}`} className="hover:bg-brand-50">
-                      <Td>{row.article_name}</Td>
-                      <Td>{row.client_name}</Td>
-                      <Td>{row.days_punched}</Td>
-                      <Td>{row.hours_punched}</Td>
-                      <Td>{new Date(row.first_attendance).toLocaleDateString('en-IN')}</Td>
-                      <Td>{new Date(row.last_attendance).toLocaleDateString('en-IN')}</Td>
-                    </tr>
-                  ))}
-                </Tbody>
-              </Table>
-            )}
-          </>
         )}
       </Modal>
     </div>

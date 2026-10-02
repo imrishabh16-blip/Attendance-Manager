@@ -1,5 +1,5 @@
 import ExcelJS from 'exceljs'
-import type { ClientWorkSlot, ArticleEngagementRow } from '@/lib/sessionReport'
+import type { ClientWorkSlot } from '@/lib/workDuration'
 
 export interface StatusReportRow {
   article_name: string
@@ -30,21 +30,6 @@ export interface AttendanceExportRow {
   others_client_name: string | null
   regularized: boolean
   status: string
-}
-
-
-export interface SessionReportRow {
-  assignment_label: string
-  client_name:      string
-  work_type:        string
-  session_number:   string
-  articles_count:   number
-  article_names:    string
-  attendance_days:  number
-  total_hours:      number
-  status:           'Active' | 'Completed'
-  first_date:       string
-  last_date:        string
 }
 
 const HEADER_FILL: ExcelJS.Fill = {
@@ -195,65 +180,11 @@ export async function buildStatusReportExcel(rows: StatusReportRow[], date: stri
   return Buffer.from(buffer)
 }
 
-const SESSION_STATUS_COLORS: Record<string, string> = {
+const SLOT_STATUS_COLORS: Record<string, string> = {
   'Active':    'FF15803D',
   'Completed': 'FF1D4ED8',
 }
 
-export async function buildSessionReportExcel(rows: SessionReportRow[]): Promise<Buffer> {
-  const wb = new ExcelJS.Workbook()
-  wb.creator = 'CA Attendance Manager'
-  wb.created = new Date()
-
-  const ws = wb.addWorksheet('Session Report', {
-    views: [{ state: 'frozen', ySplit: 1 }],
-  })
-
-  ws.columns = [
-    { header: 'Assignment',       key: 'assignment_label', width: 34 },
-    { header: 'Client Name',      key: 'client_name',      width: 26 },
-    { header: 'Work Type',        key: 'work_type',        width: 24 },
-    { header: 'Session',          key: 'session_number',   width: 10 },
-    { header: 'Articles',         key: 'articles_count',   width: 12 },
-    { header: 'Article Names',    key: 'article_names',    width: 36 },
-    { header: 'Days',             key: 'attendance_days',  width: 10 },
-    { header: 'Hours',            key: 'total_hours',      width: 10 },
-    { header: 'Status',           key: 'status',           width: 12 },
-    { header: 'First Attendance', key: 'first_date',       width: 16 },
-    { header: 'Last Attendance',  key: 'last_date',        width: 16 },
-  ]
-
-  applyHeaderStyle(ws.getRow(1))
-
-  const fmtDate = (iso: string) => new Date(iso).toLocaleDateString('en-IN')
-
-  for (const row of rows) {
-    const r = ws.addRow({
-      assignment_label: row.assignment_label,
-      client_name:      row.client_name,
-      work_type:        row.work_type,
-      session_number:   row.session_number,
-      articles_count:   row.articles_count,
-      article_names:    row.article_names,
-      attendance_days:  row.attendance_days,
-      total_hours:      row.total_hours,
-      status:           row.status,
-      first_date:       fmtDate(row.first_date),
-      last_date:        fmtDate(row.last_date),
-    })
-    const color = SESSION_STATUS_COLORS[row.status]
-    if (color) r.getCell('status').font = { bold: true, color: { argb: color } }
-  }
-
-  ws.autoFilter = { from: 'A1', to: 'K1' }
-
-  const buffer = await wb.xlsx.writeBuffer()
-  return Buffer.from(buffer)
-}
-
-// Client Work Duration shares the Session Report's Active/Completed
-// semantics, so it reuses SESSION_STATUS_COLORS rather than redeclaring the
-// same two colors under a new name.
 export async function buildClientWorkDurationExcel(rows: ClientWorkSlot[]): Promise<Buffer> {
   const wb = new ExcelJS.Workbook()
   wb.creator = 'CA Attendance Manager'
@@ -291,7 +222,7 @@ export async function buildClientWorkDurationExcel(rows: ClientWorkSlot[]): Prom
       status:           row.status,
       slot_number:      row.slot_number,
     })
-    const color = SESSION_STATUS_COLORS[row.status]
+    const color = SLOT_STATUS_COLORS[row.status]
     if (color) r.getCell('status').font = { bold: true, color: { argb: color } }
   }
 
@@ -300,46 +231,3 @@ export async function buildClientWorkDurationExcel(rows: ClientWorkSlot[]): Prom
   const buffer = await wb.xlsx.writeBuffer()
   return Buffer.from(buffer)
 }
-
-// Article Engagement Duration is cumulative (no sessions/slots/status), so
-// unlike buildSessionReportExcel / buildClientWorkDurationExcel there is no
-// status column or color coding here — just the six required columns.
-export async function buildArticleEngagementExcel(rows: ArticleEngagementRow[]): Promise<Buffer> {
-  const wb = new ExcelJS.Workbook()
-  wb.creator = 'CA Attendance Manager'
-  wb.created = new Date()
-
-  const ws = wb.addWorksheet('Article Engagement Duration', {
-    views: [{ state: 'frozen', ySplit: 1 }],
-  })
-
-  ws.columns = [
-    { header: 'Article Name',     key: 'article_name',     width: 28 },
-    { header: 'Client Name',      key: 'client_name',      width: 28 },
-    { header: 'Days Punched',     key: 'days_punched',     width: 14 },
-    { header: 'Hours Punched',    key: 'hours_punched',    width: 14 },
-    { header: 'First Attendance', key: 'first_attendance', width: 16 },
-    { header: 'Last Attendance',  key: 'last_attendance',  width: 16 },
-  ]
-
-  applyHeaderStyle(ws.getRow(1))
-
-  const fmtDate = (iso: string) => new Date(iso).toLocaleDateString('en-IN')
-
-  for (const row of rows) {
-    ws.addRow({
-      article_name:     row.article_name,
-      client_name:      row.client_name,
-      days_punched:     row.days_punched,
-      hours_punched:    row.hours_punched,
-      first_attendance: fmtDate(row.first_attendance),
-      last_attendance:  fmtDate(row.last_attendance),
-    })
-  }
-
-  ws.autoFilter = { from: 'A1', to: 'F1' }
-
-  const buffer = await wb.xlsx.writeBuffer()
-  return Buffer.from(buffer)
-}
-

@@ -1,52 +1,56 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
+import { useQuery } from '@tanstack/react-query'
 import { Button } from '@/components/ui/Button'
 import { Card, CardHeader, CardBody } from '@/components/ui/Card'
 import { Table, Thead, Tbody, Th, Td } from '@/components/ui/Table'
 import toast from 'react-hot-toast'
 import { Download, FileSpreadsheet } from 'lucide-react'
-import type { ClientWorkSlot } from '@/lib/sessionReport'
+import type { ClientWorkSlot } from '@/lib/workDuration'
 
-export default function ClientWorkDurationClient() {
-  const [rows, setRows]         = useState<ClientWorkSlot[] | null>(null)
-  const [loading, setLoading]   = useState(true)
-  const [exporting, setExporting] = useState(false)
+interface Props {
+  clients: string[]
+}
 
-  // Fetched once the page itself is opened — historical (full attendance
-  // history), not part of the Dashboard's realtime bundle.
-  useEffect(() => {
-    async function load() {
-      setLoading(true)
-      try {
-        const res = await fetch('/api/export/client-work-duration?format=json')
-        if (!res.ok) throw new Error('Request failed')
-        const { rows } = await res.json() as { rows: ClientWorkSlot[] }
-        setRows(rows)
-      } catch {
-        toast.error('Failed to load Client Work Duration')
-      } finally {
-        setLoading(false)
-      }
-    }
-    load()
-  }, [])
+export default function ClientWorkDurationClient({ clients }: Props) {
+  const [clientName, setClientName] = useState('')
+  const [exporting, setExporting]   = useState(false)
 
-  // Same endpoint as the preview fetch, without format=json — server returns
-  // the .xlsx binary built from the exact same deriveClientWorkDuration()
-  // result. Mirrors ReportsClient's download pattern.
+  // Nothing is fetched until a client is selected: `enabled` keeps the query
+  // idle, and the server filters attendance to that one client in the
+  // database. Switching client changes the key, which aborts the in-flight
+  // request and starts the new one.
+  const { data: rows, isLoading, isError } = useQuery({
+    queryKey: ['client-work-duration', clientName],
+    enabled:  clientName !== '',
+    queryFn: async ({ signal }) => {
+      const params = new URLSearchParams({ client_name: clientName, format: 'json' })
+      const res = await fetch(`/api/export/client-work-duration?${params}`, { signal })
+      if (!res.ok) throw new Error('Request failed')
+      const { rows } = await res.json() as { rows: ClientWorkSlot[] }
+      return rows
+    },
+  })
+
+  // Same endpoint and client as the preview fetch, without format=json —
+  // server returns the .xlsx binary built from the exact same
+  // deriveClientWorkDuration() result. Mirrors ReportsClient's download
+  // pattern.
   async function downloadExcel() {
+    if (!clientName) return
     setExporting(true)
     try {
-      const res = await fetch('/api/export/client-work-duration')
+      const res = await fetch(`/api/export/client-work-duration?${new URLSearchParams({ client_name: clientName })}`)
       if (!res.ok) { toast.error('Export failed'); return }
 
       const today = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' })
+      const safeClient = clientName.replace(/[^a-zA-Z0-9]+/g, '_')
       const blob  = await res.blob()
       const url   = URL.createObjectURL(blob)
       const a     = document.createElement('a')
       a.href      = url
-      a.download  = `client_work_duration_${today}.xlsx`
+      a.download  = `client_work_duration_${safeClient}_${today}.xlsx`
       a.click()
       URL.revokeObjectURL(url)
     } catch {
@@ -61,7 +65,7 @@ export default function ClientWorkDurationClient() {
       <div className="bg-white border-b border-brand-200 px-4 sm:px-6 py-4">
         <div className="max-w-6xl mx-auto flex items-center justify-between gap-3">
           <h1 className="text-lg font-bold text-gray-900">Client Work Duration</h1>
-          <Button onClick={downloadExcel} loading={exporting}>
+          <Button onClick={downloadExcel} loading={exporting} disabled={!clientName}>
             <Download className="h-4 w-4" />
             Export Excel
           </Button>
@@ -71,20 +75,37 @@ export default function ClientWorkDurationClient() {
       <div className="max-w-6xl mx-auto px-4 sm:px-6 py-5">
         <Card>
           <CardHeader>
-            <div className="flex items-center gap-2">
-              <FileSpreadsheet className="h-4 w-4 text-blue-600" />
-              <h2 className="text-sm font-semibold text-gray-900">Work Slots by Client</h2>
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              <div className="flex items-center gap-2">
+                <FileSpreadsheet className="h-4 w-4 text-blue-600" />
+                <h2 className="text-sm font-semibold text-gray-900">Work Slots by Client</h2>
+              </div>
+              <select
+                aria-label="Client"
+                value={clientName}
+                onChange={e => setClientName(e.target.value)}
+                className="w-full sm:w-72 px-3 py-2 rounded-xl border border-brand-200 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-brand-500"
+              >
+                <option value="">Select a client…</option>
+                {clients.map(name => (
+                  <option key={name} value={name}>{name}</option>
+                ))}
+              </select>
             </div>
           </CardHeader>
-          <CardBody className={!loading && rows && rows.length > 0 ? 'p-0' : undefined}>
-            {loading ? (
+          <CardBody className={rows && rows.length > 0 ? 'p-0' : undefined}>
+            {clientName === '' ? (
+              <p className="text-sm text-gray-400 text-center py-8">Select a client to view work slots.</p>
+            ) : isLoading ? (
               <div className="p-5 space-y-2">
                 {[0, 1, 2, 3].map(i => (
                   <div key={i} className="h-12 bg-brand-100 rounded-xl animate-pulse" />
                 ))}
               </div>
+            ) : isError ? (
+              <p className="text-sm text-red-600 text-center py-8">Failed to load Client Work Duration</p>
             ) : !rows || rows.length === 0 ? (
-              <p className="text-sm text-gray-400 text-center py-8">No client work slots found</p>
+              <p className="text-sm text-gray-400 text-center py-8">No work slots found for this client</p>
             ) : (
               <div className="overflow-x-auto">
                 <Table>
