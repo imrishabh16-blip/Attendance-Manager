@@ -160,8 +160,6 @@ export default function DashboardClient({ profile: _, initialData }: Props) {
     }
   }
 
-  const engagementCount = engagementRows ? engagementRows.length : '—'
-
   // The search box is the only filter — a plain case-insensitive substring
   // match on Article Name or Last Punched Client against the rows already
   // fetched above. Blank query shows every row.
@@ -327,37 +325,36 @@ export default function DashboardClient({ profile: _, initialData }: Props) {
               onClick={() => setReportingWiseOpen(true)}
             />
 
-            {/* Client Engagement — full width, historical: nothing is
-                fetched until a Start Date is picked and Generate is clicked */}
-            <MetricCard
-              label="Client Engagement"
-              value={engagementCount}
-              icon={Clock}
-              color="blue"
-              wide
-              action={
-                <>
-                  <label htmlFor="engagement-start-date" className="text-xs font-medium text-gray-500">
-                    Start Date
-                  </label>
-                  <input
-                    id="engagement-start-date"
-                    type="date"
-                    value={engagementStartDate}
-                    max={todayIST}
-                    onChange={e => setEngagementStartDate(e.target.value)}
-                    className="px-3 py-2 rounded-xl border border-brand-200 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-brand-500"
-                  />
-                  <Button
-                    onClick={generateArticleEngagement}
-                    loading={engagementLoading}
-                    disabled={!engagementStartDate}
-                  >
-                    Generate
-                  </Button>
-                </>
-              }
-            />
+            {/* Client Engagement — full-width control ribbon, deliberately no
+                count/value: nothing is fetched or calculated until a Start Date
+                is picked and Generate is clicked. Same card tokens as MetricCard. */}
+            <div className="bg-white rounded-2xl border border-brand-200 shadow-sm p-4 flex flex-wrap items-center gap-3">
+              <div className="inline-flex items-center justify-center w-10 h-10 rounded-xl flex-shrink-0 bg-blue-50">
+                <Clock className="h-5 w-5 text-blue-600" />
+              </div>
+              <p className="text-sm font-semibold text-gray-900">Client Engagement</p>
+
+              <div className="sm:ml-auto flex items-center gap-2 flex-wrap">
+                <label htmlFor="engagement-start-date" className="text-xs font-medium text-gray-500">
+                  Start Date
+                </label>
+                <input
+                  id="engagement-start-date"
+                  type="date"
+                  value={engagementStartDate}
+                  max={todayIST}
+                  onChange={e => setEngagementStartDate(e.target.value)}
+                  className="px-3 py-2 rounded-xl border border-brand-200 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-brand-500"
+                />
+                <Button
+                  onClick={generateArticleEngagement}
+                  loading={engagementLoading}
+                  disabled={!engagementStartDate}
+                >
+                  Generate
+                </Button>
+              </div>
+            </div>
 
             {/* Currently Checked In — collapsible */}
             <Card>
