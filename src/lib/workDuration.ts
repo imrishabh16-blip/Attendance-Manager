@@ -144,18 +144,23 @@ export interface ArticleEngagementRow {
   last_attendance:     string
 }
 
-// Derives Client Engagement rows — one cumulative row per article
-// over whatever records the caller passes in (the API bounds these to
-// attendance from the selected Start Date through today). Deliberately does
-// NOT go through computeSlots: there is no inactivity-gap splitting and no
-// Active/Completed status, because this answers "how long has this Article
-// been engaged with clients", not "what are the discrete work slots".
+// Derives Client Engagement rows — one row per article over whatever records
+// the caller passes in (the API bounds these to attendance from the selected
+// Start Date through today). Deliberately does NOT go through computeSlots:
+// there is no inactivity-gap splitting and no Active/Completed status,
+// because this answers "how long has this Article been engaged with the
+// client it most recently punched", not "what are the discrete work slots".
 //
 // Same boundary as Client Work Duration: only client-assigned attendance
 // feeds RawSessionRecord, and clients are identified by client_name (never
 // assignment_id), so the same client under different work types is one
-// client. "Last Punched Client" is the client of the article's most recent
-// check-in in the range.
+// client.
+//
+// Two steps per article: (1) "Last Punched Client" is the client of the
+// article's most recent check-in in the range; (2) Days / First Attendance /
+// Last Attendance are then computed from that Article + Client combination
+// only. Attendance for the article's other clients is deliberately ignored,
+// so Days is not the article's total attendance days.
 export function deriveArticleEngagementDuration(records: RawSessionRecord[]): ArticleEngagementRow[] {
   const byArticle = new Map<string, RawSessionRecord[]>()
   for (const r of records) {
@@ -169,18 +174,23 @@ export function deriveArticleEngagementDuration(records: RawSessionRecord[]): Ar
   for (const articleRecords of byArticle.values()) {
     const { article_id, article_name } = articleRecords[0]
 
-    const sortedDates = [...new Set(articleRecords.map(r => r.attendance_date))].sort()
     const lastPunch = articleRecords.reduce((latest, r) =>
       new Date(r.checked_in_at).getTime() >= new Date(latest.checked_in_at).getTime() ? r : latest
     )
+
+    const clientDates = [...new Set(
+      articleRecords
+        .filter(r => r.client_name === lastPunch.client_name)
+        .map(r => r.attendance_date)
+    )].sort()
 
     rows.push({
       article_id,
       article_name,
       last_punched_client: lastPunch.client_name,
-      days:                sortedDates.length,
-      first_attendance:    sortedDates[0],
-      last_attendance:     sortedDates[sortedDates.length - 1],
+      days:                clientDates.length,
+      first_attendance:    clientDates[0],
+      last_attendance:     clientDates[clientDates.length - 1],
     })
   }
 
