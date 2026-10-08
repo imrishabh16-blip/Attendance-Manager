@@ -13,9 +13,20 @@ interface Props {
   clients: string[]
 }
 
+// Hands a downloaded blob to the browser as a file.
+function saveBlob(blob: Blob, fileName: string) {
+  const url = URL.createObjectURL(blob)
+  const a   = document.createElement('a')
+  a.href     = url
+  a.download = fileName
+  a.click()
+  URL.revokeObjectURL(url)
+}
+
 export default function ClientWorkDurationClient({ clients }: Props) {
-  const [clientName, setClientName] = useState('')
-  const [exporting, setExporting]   = useState(false)
+  const [clientName, setClientName]     = useState('')
+  const [exporting, setExporting]       = useState(false)
+  const [exportingAll, setExportingAll] = useState(false)
 
   // Nothing is fetched until a client is selected: `enabled` keeps the query
   // idle, and the server filters attendance to that one client in the
@@ -46,13 +57,7 @@ export default function ClientWorkDurationClient({ clients }: Props) {
 
       const today = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' })
       const safeClient = clientName.replace(/[^a-zA-Z0-9]+/g, '_')
-      const blob  = await res.blob()
-      const url   = URL.createObjectURL(blob)
-      const a     = document.createElement('a')
-      a.href      = url
-      a.download  = `client_work_duration_${safeClient}_${today}.xlsx`
-      a.click()
-      URL.revokeObjectURL(url)
+      saveBlob(await res.blob(), `client_analytics_${safeClient}_${today}.xlsx`)
     } catch {
       toast.error('Export failed')
     } finally {
@@ -60,11 +65,29 @@ export default function ClientWorkDurationClient({ clients }: Props) {
     }
   }
 
+  // Export-only: the server aggregates every client from a single attendance
+  // query and returns just the .xlsx. Nothing is rendered or held in the
+  // browser, and there is deliberately no JSON form of this report.
+  async function downloadAllClientsExcel() {
+    setExportingAll(true)
+    try {
+      const res = await fetch(`/api/export/client-work-duration?${new URLSearchParams({ export: 'all_clients' })}`)
+      if (!res.ok) { toast.error('Export failed'); return }
+
+      const today = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' })
+      saveBlob(await res.blob(), `client_analytics_All_Clients_${today}.xlsx`)
+    } catch {
+      toast.error('Export failed')
+    } finally {
+      setExportingAll(false)
+    }
+  }
+
   return (
     <div className="min-h-screen bg-brand-100">
       <div className="bg-white border-b border-brand-200 px-4 sm:px-6 py-4">
         <div className="max-w-6xl mx-auto flex items-center justify-between gap-3">
-          <h1 className="text-lg font-bold text-gray-900">Client Work Duration</h1>
+          <h1 className="text-lg font-bold text-gray-900">Client Analytics</h1>
           <Button onClick={downloadExcel} loading={exporting} disabled={!clientName}>
             <Download className="h-4 w-4" />
             Export Excel
@@ -80,17 +103,23 @@ export default function ClientWorkDurationClient({ clients }: Props) {
                 <FileSpreadsheet className="h-4 w-4 text-blue-600" />
                 <h2 className="text-sm font-semibold text-gray-900">Work Slots by Client</h2>
               </div>
-              <select
-                aria-label="Client"
-                value={clientName}
-                onChange={e => setClientName(e.target.value)}
-                className="w-full sm:w-72 px-3 py-2 rounded-xl border border-brand-200 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-brand-500"
-              >
-                <option value="">Select a client…</option>
-                {clients.map(name => (
-                  <option key={name} value={name}>{name}</option>
-                ))}
-              </select>
+              <div className="flex flex-col gap-2 w-full sm:w-auto">
+                <select
+                  aria-label="Client"
+                  value={clientName}
+                  onChange={e => setClientName(e.target.value)}
+                  className="w-full sm:w-72 px-3 py-2 rounded-xl border border-brand-200 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-brand-500"
+                >
+                  <option value="">Select a client…</option>
+                  {clients.map(name => (
+                    <option key={name} value={name}>{name}</option>
+                  ))}
+                </select>
+                <Button variant="secondary" onClick={downloadAllClientsExcel} loading={exportingAll} className="w-full">
+                  <Download className="h-4 w-4" />
+                  Export All Clients
+                </Button>
+              </div>
             </div>
           </CardHeader>
           <CardBody className={rows && rows.length > 0 ? 'p-0' : undefined}>
@@ -103,7 +132,7 @@ export default function ClientWorkDurationClient({ clients }: Props) {
                 ))}
               </div>
             ) : isError ? (
-              <p className="text-sm text-red-600 text-center py-8">Failed to load Client Work Duration</p>
+              <p className="text-sm text-red-600 text-center py-8">Failed to load Client Analytics</p>
             ) : !rows || rows.length === 0 ? (
               <p className="text-sm text-gray-400 text-center py-8">No work slots found for this client</p>
             ) : (

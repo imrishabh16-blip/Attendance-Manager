@@ -24,6 +24,7 @@ class AttendanceQuery implements PromiseLike<QueryResult> {
   private readonly filters: Array<(row: FakeAttendanceRow) => boolean> = []
   private readonly sorts:   Array<{ column: keyof FakeAttendanceRow; ascending: boolean }> = []
   private window: [number, number] | null = null
+  private embeddedFilter = false
   private readonly rows:       FakeAttendanceRow[]
   private readonly selectList: string
   private readonly calls:      string[]
@@ -39,6 +40,20 @@ class AttendanceQuery implements PromiseLike<QueryResult> {
 
   private cell(row: FakeAttendanceRow, column: string) {
     return row[column as keyof FakeAttendanceRow]
+  }
+
+  // Only the embedded "assignments.client_name" filter the Client Analytics
+  // route uses. On an !inner embed PostgREST drops parent rows whose embedded
+  // row doesn't match; without !inner it would NOT filter parents, which
+  // execute() refuses to model silently.
+  eq(column: string, value: string) {
+    if (column !== 'assignments.client_name') {
+      throw new Error(`fakeSupabase: unsupported eq(${column})`)
+    }
+    this.calls.push(`eq:${column}:${value}`)
+    this.embeddedFilter = true
+    this.filters.push(row => row.assignments?.client_name === value)
+    return this
   }
 
   gte(column: string, value: string) {
@@ -84,6 +99,9 @@ class AttendanceQuery implements PromiseLike<QueryResult> {
   private execute(): QueryResult {
     // !inner makes PostgREST drop parent rows whose embedded row is missing.
     const innerJoinsAssignments = this.selectList.includes('assignments!inner')
+    if (this.embeddedFilter && !innerJoinsAssignments) {
+      throw new Error('fakeSupabase: embedded filter without assignments!inner would not filter parent rows')
+    }
 
     let result = this.rows.filter(row =>
       (!innerJoinsAssignments || row.assignments !== null) &&

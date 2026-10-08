@@ -190,7 +190,7 @@ export async function buildClientWorkDurationExcel(rows: ClientWorkSlot[]): Prom
   wb.creator = 'CA Attendance Manager'
   wb.created = new Date()
 
-  const ws = wb.addWorksheet('Client Work Duration', {
+  const ws = wb.addWorksheet('Client Analytics', {
     views: [{ state: 'frozen', ySplit: 1 }],
   })
 

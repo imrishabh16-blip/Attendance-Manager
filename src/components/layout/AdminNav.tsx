@@ -31,7 +31,7 @@ const navItems: NavItem[] = [
   { href: '/articles',               label: 'Articles',               icon: GraduationCap,   roles: ['admin', 'partner', 'manager'] as UserRole[] },
   { href: '/users',                  label: 'Users',                  icon: Users,           roles: ['admin'] as UserRole[] },
   { href: '/reports',                label: 'Reports',                icon: FileText,        roles: ['admin', 'partner', 'manager'] as UserRole[] },
-  { href: '/client-work-duration',   label: 'Client Work Duration',   icon: Clock,           roles: ['admin', 'partner', 'manager'] as UserRole[] },
+  { href: '/client-work-duration',   label: 'Client Analytics',       icon: Clock,           roles: ['admin', 'partner', 'manager'] as UserRole[] },
   { href: '/article-analytics',      label: 'Article Analytics',      icon: BarChart3,       roles: ['admin', 'partner', 'manager'] as UserRole[], desktopOnly: true },
 ]
 
