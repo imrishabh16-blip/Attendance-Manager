@@ -23,7 +23,9 @@ const NOW   = '2026-10-08T06:00:00Z'
 const TODAY = '2026-10-08'
 
 const XLSX_TYPE = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
-const HEADERS = ['Client Name', 'No. of Articles', 'Article Names', 'Days Punched', 'Hours Punched', 'First Punch', 'Last Punch', 'Status', 'Work Slot No.']
+// Hours is no longer part of Client Analytics: no "Hours Punched" column.
+const HEADERS = ['Client Name', 'No. of Articles', 'Article Names', 'Days Punched', 'First Punch', 'Last Punch', 'Status', 'Work Slot No.']
+const SLOT_FIELDS = ['article_names', 'articles_count', 'attendance_days', 'client_name', 'first_date', 'last_date', 'slot_number', 'status']
 const EXPORT_ALL = 'export=all_clients'
 
 let seq = 0
@@ -48,22 +50,22 @@ function session(
 //   Gamma & Co.  WS1 09-10
 function fixture(): FakeAttendanceRow[] {
   return [
-    session('A', 'Acme', '2026-09-01', '09:00', '13:00'),   // 4h
-    session('B', 'Acme', '2026-09-01', '10:00', '14:00'),   // 4h, same date as A
-    session('A', 'Acme', '2026-09-02', '09:00', '10:00'),   // 1h
-    session('A', 'Acme', '2026-09-20', '09:00', '11:30'),   // 2.5h, >7 days after 09-02
-    session('B', 'Acme', '2026-10-06', '09:00', '10:00'),   // 1h, >7 days after 09-20
-    session('C', 'Beta', '2026-10-05', '09:00', '12:00'),   // 3h
-    session('C', 'Beta', '2026-10-05', '14:00', '16:00'),   // 2h
-    session('A', 'Gamma & Co.', '2026-09-10', '08:00', '09:30'),   // 1.5h
+    session('A', 'Acme', '2026-09-01', '09:00', '13:00'),
+    session('B', 'Acme', '2026-09-01', '10:00', '14:00'),   // same date as A
+    session('A', 'Acme', '2026-09-02', '09:00', '10:00'),
+    session('A', 'Acme', '2026-09-20', '09:00', '11:30'),   // >7 days after 09-02
+    session('B', 'Acme', '2026-10-06', '09:00', '10:00'),   // >7 days after 09-20
+    session('C', 'Beta', '2026-10-05', '09:00', '12:00'),
+    session('C', 'Beta', '2026-10-05', '14:00', '16:00'),   // second session, same date
+    session('A', 'Gamma & Co.', '2026-09-10', '08:00', '09:30'),
     session('A', null, '2026-10-07', '09:00', '12:00'),     // unallocated: no client, must never appear
   ]
 }
 
 const ACME_ROWS: Partial<ClientWorkSlot>[] = [
-  { client_name: 'Acme', slot_number: 'WS3', articles_count: 1, article_names: 'Article B', attendance_days: 1, total_hours: 1,   status: 'Active',    first_date: '2026-10-06', last_date: '2026-10-06' },
-  { client_name: 'Acme', slot_number: 'WS1', articles_count: 2, article_names: 'Article A, Article B', attendance_days: 2, total_hours: 9, status: 'Completed', first_date: '2026-09-01', last_date: '2026-09-02' },
-  { client_name: 'Acme', slot_number: 'WS2', articles_count: 1, article_names: 'Article A', attendance_days: 1, total_hours: 2.5, status: 'Completed', first_date: '2026-09-20', last_date: '2026-09-20' },
+  { client_name: 'Acme', slot_number: 'WS3', articles_count: 1, article_names: 'Article B', attendance_days: 1, status: 'Active',    first_date: '2026-10-06', last_date: '2026-10-06' },
+  { client_name: 'Acme', slot_number: 'WS1', articles_count: 2, article_names: 'Article A, Article B', attendance_days: 2, status: 'Completed', first_date: '2026-09-01', last_date: '2026-09-02' },
+  { client_name: 'Acme', slot_number: 'WS2', articles_count: 1, article_names: 'Article A', attendance_days: 1, status: 'Completed', first_date: '2026-09-20', last_date: '2026-09-20' },
 ]
 
 interface CallOptions {
@@ -105,7 +107,7 @@ const fmtDate = (iso: string) => new Date(iso).toLocaleDateString('en-IN')   // 
 
 // A JSON slot as it appears in a sheet row.
 const toSheetRow = (r: ClientWorkSlot) =>
-  [r.client_name, r.articles_count, r.article_names, r.attendance_days, r.total_hours, fmtDate(r.first_date), fmtDate(r.last_date), r.status, r.slot_number]
+  [r.client_name, r.articles_count, r.article_names, r.attendance_days, fmtDate(r.first_date), fmtDate(r.last_date), r.status, r.slot_number]
 
 async function readSheet(res: Response) {
   const wb = new ExcelJS.Workbook()
@@ -140,19 +142,26 @@ describe('GET /api/export/client-work-duration', () => {
       assert.ok(calls.includes('eq:assignments.client_name:Acme'))
     })
 
-    it('Days combines articles and Hours sums every session', async () => {
+    it('Days combines articles: distinct dates for the client, not man-days', async () => {
       const { rows } = await rowsFor(forClient('Acme'))
       const ws1 = rows.find(r => r.slot_number === 'WS1')
 
       assert.equal(ws1?.attendance_days, 2)   // 09-01 (A and B) + 09-02: not 3 man-days
-      assert.equal(ws1?.total_hours, 9)       // 4 + 4 + 1 man-hours
     })
 
-    it('two sessions on one date count as one day and both add to Hours', async () => {
+    it('two sessions on one date count as one day', async () => {
       const { rows } = await rowsFor(forClient('Beta'))
-      assert.deepEqual(pick(rows, ['client_name', 'slot_number', 'attendance_days', 'total_hours', 'status']), [
-        { client_name: 'Beta', slot_number: 'WS1', attendance_days: 1, total_hours: 5, status: 'Active' },
+      assert.deepEqual(pick(rows, ['client_name', 'slot_number', 'attendance_days', 'status']), [
+        { client_name: 'Beta', slot_number: 'WS1', attendance_days: 1, status: 'Active' },
       ])
+    })
+
+    it('no row carries Hours — only the report fields are returned', async () => {
+      for (const client of ['Acme', 'Beta', 'Gamma & Co.']) {
+        const { rows } = await rowsFor(forClient(client))
+        assert.ok(rows.length > 0, client)
+        for (const row of rows) assert.deepEqual(Object.keys(row).sort(), SLOT_FIELDS, client)
+      }
     })
 
     it('a client name with no attendance yields no rows', async () => {
@@ -182,8 +191,11 @@ describe('GET /api/export/client-work-duration', () => {
       const screenRows = (await rowsFor(forClient('Acme'))).rows
 
       assert.deepEqual(headers, HEADERS)
+      assert.ok(!headers.some(h => /hour/i.test(String(h))), 'no Hours column')
+      assert.ok(rows.every(r => r.length === HEADERS.length), 'no extra cells')
       assert.deepEqual(rows, screenRows.map(toSheetRow))
       assert.equal(rows.length, 3)
+      assert.deepEqual(rows.map(r => r[3]), [1, 2, 1])   // Days Punched, unchanged: WS3, WS1, WS2
     })
 
     it('file name sanitises special characters in a client name', async () => {
@@ -211,17 +223,25 @@ describe('GET /api/export/client-work-duration', () => {
       assert.deepEqual(headers, HEADERS)
     })
 
+    it('has no Hours column', async () => {
+      const { headers, rows } = await exportAll()
+
+      assert.ok(!headers.some(h => /hour/i.test(String(h))))
+      assert.ok(rows.length > 0)
+      assert.ok(rows.every(r => r.length === HEADERS.length), 'no extra cells')
+    })
+
     it('contains every client\'s slots, aggregated, in the existing management order', async () => {
       const { rows } = await exportAll()
 
       assert.deepEqual(
-        rows.map(r => [r[0], r[8], r[7], r[3], r[4]]),   // client, slot, status, days, hours
+        rows.map(r => [r[0], r[7], r[6], r[3]]),   // client, slot, status, days
         [
-          ['Beta',        'WS1', 'Active',    1, 5],
-          ['Acme',        'WS3', 'Active',    1, 1],
-          ['Acme',        'WS1', 'Completed', 2, 9],
-          ['Gamma & Co.', 'WS1', 'Completed', 1, 1.5],
-          ['Acme',        'WS2', 'Completed', 1, 2.5],
+          ['Beta',        'WS1', 'Active',    1],
+          ['Acme',        'WS3', 'Active',    1],
+          ['Acme',        'WS1', 'Completed', 2],
+          ['Gamma & Co.', 'WS1', 'Completed', 1],
+          ['Acme',        'WS2', 'Completed', 1],
         ]
       )
     })
@@ -238,8 +258,8 @@ describe('GET /api/export/client-work-duration', () => {
     it('excludes unallocated / Others punches', async () => {
       const { rows } = await exportAll()
 
-      assert.ok(!rows.some(r => r[6] === fmtDate('2026-10-07')))
-      assert.equal(rows.reduce((sum, r) => sum + (r[4] as number), 0), 9 + 2.5 + 1 + 5 + 1.5)   // 19; the 3h unallocated punch is not in it
+      assert.ok(!rows.some(r => r[5] === fmtDate('2026-10-07')))   // Last Punch: the unallocated punch's date never appears
+      assert.equal(rows.reduce((sum, r) => sum + (r[3] as number), 0), (1 + 2 + 1) + 1 + 1)   // Acme 4, Beta 1, Gamma 1 — the unallocated punch adds no day
     })
 
     it('uses one server-side attendance stream — no per-client requests', async () => {

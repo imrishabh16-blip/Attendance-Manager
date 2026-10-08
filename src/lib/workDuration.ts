@@ -23,14 +23,13 @@ interface DateSlot {
   articles_count:  number
   article_names:   string
   attendance_days: number
-  total_hours:     number
   status:          'Active' | 'Completed'
   first_date:      string
   last_date:       string
 }
 
 // Splits one client's attendance dates into slots on a >7-day inactivity gap,
-// then aggregates each slot (distinct articles, total hours, span, status).
+// then aggregates each slot (distinct articles, span, status).
 function computeSlots(groupRecords: RawSessionRecord[], todayIST: string): DateSlot[] {
   // Distinct attendance dates, sorted ascending, split into slots
   const dateSet     = new Set(groupRecords.map(r => r.attendance_date))
@@ -53,16 +52,10 @@ function computeSlots(groupRecords: RawSessionRecord[], todayIST: string): DateS
     const bucketRecords = groupRecords.filter(r => bucketDateSet.has(r.attendance_date))
 
     const articleMap = new Map<string, string>()
-    let totalHours = 0
 
     for (const r of bucketRecords) {
       if (!articleMap.has(r.article_id)) {
         articleMap.set(r.article_id, r.article_name)
-      }
-      if (r.checked_out_at) {
-        totalHours +=
-          (new Date(r.checked_out_at).getTime() - new Date(r.checked_in_at).getTime()) /
-          3_600_000
       }
     }
 
@@ -73,7 +66,6 @@ function computeSlots(groupRecords: RawSessionRecord[], todayIST: string): DateS
       articles_count:  articleMap.size,
       article_names:   [...articleMap.values()].filter(Boolean).sort().join(', '),
       attendance_days: bucketDates.length,
-      total_hours:     Math.round(totalHours * 10) / 10,
       status:          (daysBetween(lastDate, todayIST) <= 7 ? 'Active' : 'Completed') as 'Active' | 'Completed',
       first_date:      firstDate,
       last_date:       lastDate,
@@ -87,7 +79,6 @@ export interface ClientWorkSlot {
   articles_count:  number
   article_names:   string
   attendance_days: number
-  total_hours:     number
   status:          'Active' | 'Completed'
   first_date:      string
   last_date:       string

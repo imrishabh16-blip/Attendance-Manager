@@ -145,7 +145,6 @@ export default function ClientWorkDurationClient({ clients }: Props) {
                       <Th>Articles</Th>
                       <Th>Article Names</Th>
                       <Th>Days</Th>
-                      <Th>Hours</Th>
                       <Th>Status</Th>
                       <Th>First Punch</Th>
                       <Th>Last Punch</Th>
@@ -161,7 +160,6 @@ export default function ClientWorkDurationClient({ clients }: Props) {
                           <span title={row.article_names}>{row.article_names}</span>
                         </Td>
                         <Td>{row.attendance_days}</Td>
-                        <Td>{row.total_hours}</Td>
                         <Td>
                           <span className={row.status === 'Active' ? 'text-green-700 font-medium' : 'text-blue-700 font-medium'}>
                             {row.status}

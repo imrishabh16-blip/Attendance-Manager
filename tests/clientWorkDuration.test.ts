@@ -1,18 +1,19 @@
 // Characterization tests for deriveClientWorkDuration (Client Analytics).
-// These pin the CURRENT semantics so adding the "All" scope (or anything else)
-// can't silently change them:
-//   Days  = distinct attendance dates on which the client had >= 1 punch,
-//           combining all articles (NOT man-days)
-//   Hours = sum of (checked_out - checked_in) over every closed session of the
-//           client, across all articles (man-hours)
-// Open / auto-closed session handling is deliberately NOT pinned here — it is
-// a separate, pending investigation.
+// These pin the semantics of the slot calculation so later changes can't
+// silently alter them:
+//   Days = distinct attendance dates on which the client had >= 1 punch,
+//          combining all articles (NOT man-days)
+// Hours is no longer part of Client Analytics: a slot carries no duration
+// field at all (asserted below). Session closing and any article-level days
+// are separate, pending work and deliberately NOT pinned here.
 import { describe, it } from 'node:test'
 import assert from 'node:assert/strict'
 import { deriveClientWorkDuration, type RawSessionRecord } from '../src/lib/workDuration.ts'
 
 const TODAY = '2026-10-08'
 
+// One closed session, as the attendance query returns it. The times only make
+// the record realistic — Client Analytics does not use durations.
 function session(article: string, client: string, date: string, from: string, to: string): RawSessionRecord {
   return {
     article_id:      article,
@@ -25,27 +26,34 @@ function session(article: string, client: string, date: string, from: string, to
 }
 
 describe('deriveClientWorkDuration', () => {
-  it('Days counts a date once however many articles punched it; Hours sums every session (man-hours)', () => {
+  it('Days counts a date once however many articles punched it (client days, not man-days)', () => {
     const rows = deriveClientWorkDuration([
-      session('A', 'Acme', '2026-09-01', '09:00', '13:00'),   // 4h
-      session('B', 'Acme', '2026-09-01', '10:00', '14:00'),   // 4h, overlaps A by 3h, same date
+      session('A', 'Acme', '2026-09-01', '09:00', '13:00'),
+      session('B', 'Acme', '2026-09-01', '10:00', '14:00'),   // second article, same date
     ], TODAY)
 
     assert.equal(rows.length, 1)
     assert.equal(rows[0].attendance_days, 1)        // not 2 (man-days)
-    assert.equal(rows[0].total_hours, 8)            // not 5 (wall-clock), 4 + 4
     assert.equal(rows[0].articles_count, 2)
     assert.equal(rows[0].article_names, 'Article A, Article B')
   })
 
-  it('several sessions by one article on one date: one day, hours add up', () => {
+  it('several sessions by one article on one date: one day', () => {
     const [row] = deriveClientWorkDuration([
-      session('A', 'Acme', '2026-09-01', '09:00', '11:00'),   // 2h
-      session('A', 'Acme', '2026-09-01', '14:00', '17:00'),   // 3h
+      session('A', 'Acme', '2026-09-01', '09:00', '11:00'),
+      session('A', 'Acme', '2026-09-01', '14:00', '17:00'),
     ], TODAY)
 
     assert.equal(row.attendance_days, 1)
-    assert.equal(row.total_hours, 5)
+  })
+
+  it('a slot carries exactly the report fields — no hours / duration', () => {
+    const [row] = deriveClientWorkDuration([session('A', 'Acme', '2026-09-01', '09:00', '13:00')], TODAY)
+
+    assert.deepEqual(Object.keys(row).sort(), [
+      'article_names', 'articles_count', 'attendance_days', 'client_name',
+      'first_date', 'last_date', 'slot_number', 'status',
+    ])
   })
 
   it('splits slots on a gap of more than 7 days between punch dates; exactly 7 stays together', () => {
@@ -103,16 +111,6 @@ describe('deriveClientWorkDuration', () => {
         ['Gamma', 'WS1', 'Completed', '2026-09-10'],
       ]
     )
-  })
-
-  it('rounds hours once per slot to one decimal', () => {
-    const [row] = deriveClientWorkDuration([
-      session('A', 'Acme', '2026-09-01', '09:00', '09:20'),
-      session('A', 'Acme', '2026-09-01', '10:00', '10:20'),
-      session('A', 'Acme', '2026-09-01', '11:00', '11:20'),
-    ], TODAY)
-
-    assert.equal(row.total_hours, 1)   // 60 min exactly
   })
 
   it('returns no rows for no records', () => {
