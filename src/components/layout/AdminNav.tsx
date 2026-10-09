@@ -19,10 +19,6 @@ interface NavItem {
   label: string
   icon:  LucideIcon
   roles: UserRole[]
-  // Shown in the desktop sidebar only. The mobile bottom bar gives every item
-  // an equal slice of the width, so a seventh label would crowd it; there is
-  // no overflow/"More" menu to tuck it into.
-  desktopOnly?: boolean
 }
 
 const navItems: NavItem[] = [
@@ -32,7 +28,7 @@ const navItems: NavItem[] = [
   { href: '/users',                  label: 'Users',                  icon: Users,           roles: ['admin'] as UserRole[] },
   { href: '/reports',                label: 'Reports',                icon: FileText,        roles: ['admin', 'partner', 'manager'] as UserRole[] },
   { href: '/client-work-duration',   label: 'Client Analytics',       icon: Clock,           roles: ['admin', 'partner', 'manager'] as UserRole[] },
-  { href: '/article-analytics',      label: 'Article Analytics',      icon: BarChart3,       roles: ['admin', 'partner', 'manager'] as UserRole[], desktopOnly: true },
+  { href: '/article-analytics',      label: 'Article Analytics',      icon: BarChart3,       roles: ['admin', 'partner', 'manager'] as UserRole[] },
 ]
 
 export default function AdminNav({ profile }: Props) {
@@ -45,8 +41,7 @@ export default function AdminNav({ profile }: Props) {
     router.replace('/login')
   }
 
-  const visible       = navItems.filter(n => n.roles.includes(profile.role))
-  const visibleMobile = visible.filter(n => !n.desktopOnly)
+  const visible = navItems.filter(n => n.roles.includes(profile.role))
 
   return (
     <>
@@ -113,15 +108,16 @@ export default function AdminNav({ profile }: Props) {
         </div>
       </aside>
 
-      {/* Mobile bottom nav */}
+      {/* Mobile bottom nav — a horizontally swipeable row; every item keeps its
+          natural width and its label on one line instead of sharing the width */}
       <nav className="sm:hidden fixed bottom-0 inset-x-0 bg-white border-t border-brand-200 z-40 safe-bottom">
-        <div className="flex">
-          {visibleMobile.map(item => (
+        <div className="flex overflow-x-auto scrollbar-hide scroll-smooth-x overscroll-x-contain">
+          {visible.map(item => (
             <Link
               key={item.href}
               href={item.href}
               className={cn(
-                'flex-1 flex flex-col items-center gap-0.5 py-2.5 text-xs font-medium active:opacity-60',
+                'shrink-0 flex flex-col items-center gap-0.5 px-3 py-2.5 text-xs font-medium whitespace-nowrap active:opacity-60',
                 pathname === item.href || pathname.startsWith(item.href + '/')
                   ? 'text-brand-600'
                   : 'text-gray-400'
