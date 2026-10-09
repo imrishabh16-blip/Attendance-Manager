@@ -23,13 +23,21 @@ interface DateSlot {
   articles_count:  number
   article_names:   string
   attendance_days: number
+  article_days:    number
   status:          'Active' | 'Completed'
   first_date:      string
   last_date:       string
 }
 
 // Splits one client's attendance dates into slots on a >7-day inactivity gap,
-// then aggregates each slot (distinct articles, span, status).
+// then aggregates each slot (distinct articles, Work Days, Article Days, span,
+// status).
+//   Work Days    (attendance_days) = distinct attendance dates for the client
+//   Article Days (article_days)    = distinct (article, attendance date) pairs
+//                                    for the client
+// Both count attendance_date only — never session duration or open/closed
+// state — so any number of sessions by one article on one date is one
+// Article Day, and several articles on one date are several.
 function computeSlots(groupRecords: RawSessionRecord[], todayIST: string): DateSlot[] {
   // Distinct attendance dates, sorted ascending, split into slots
   const dateSet     = new Set(groupRecords.map(r => r.attendance_date))
@@ -51,12 +59,14 @@ function computeSlots(groupRecords: RawSessionRecord[], todayIST: string): DateS
     const bucketDateSet = new Set(bucketDates)
     const bucketRecords = groupRecords.filter(r => bucketDateSet.has(r.attendance_date))
 
-    const articleMap = new Map<string, string>()
+    const articleMap  = new Map<string, string>()
+    const articleDays = new Set<string>()
 
     for (const r of bucketRecords) {
       if (!articleMap.has(r.article_id)) {
         articleMap.set(r.article_id, r.article_name)
       }
+      articleDays.add(`${r.article_id}|${r.attendance_date}`)
     }
 
     const firstDate = bucketDates[0]
@@ -66,6 +76,7 @@ function computeSlots(groupRecords: RawSessionRecord[], todayIST: string): DateS
       articles_count:  articleMap.size,
       article_names:   [...articleMap.values()].filter(Boolean).sort().join(', '),
       attendance_days: bucketDates.length,
+      article_days:    articleDays.size,
       status:          (daysBetween(lastDate, todayIST) <= 7 ? 'Active' : 'Completed') as 'Active' | 'Completed',
       first_date:      firstDate,
       last_date:       lastDate,
@@ -79,6 +90,7 @@ export interface ClientWorkSlot {
   articles_count:  number
   article_names:   string
   attendance_days: number
+  article_days:    number
   status:          'Active' | 'Completed'
   first_date:      string
   last_date:       string

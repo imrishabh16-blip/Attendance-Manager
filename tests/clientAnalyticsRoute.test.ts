@@ -23,9 +23,11 @@ const NOW   = '2026-10-08T06:00:00Z'
 const TODAY = '2026-10-08'
 
 const XLSX_TYPE = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
-// Hours is no longer part of Client Analytics: no "Hours Punched" column.
-const HEADERS = ['Client Name', 'No. of Articles', 'Article Names', 'Days Punched', 'First Punch', 'Last Punch', 'Status', 'Work Slot No.']
-const SLOT_FIELDS = ['article_names', 'articles_count', 'attendance_days', 'client_name', 'first_date', 'last_date', 'slot_number', 'status']
+// Columns: Work Days (distinct client dates) then Article Days (distinct article + client + date).
+// Hours is no longer part of Client Analytics, and nothing is called "Man Days".
+const HEADERS = ['Client Name', 'No. of Articles', 'Article Names', 'Work Days', 'Article Days', 'First Punch', 'Last Punch', 'Status', 'Work Slot No.']
+const SLOT_FIELDS = ['article_days', 'article_names', 'articles_count', 'attendance_days', 'client_name', 'first_date', 'last_date', 'slot_number', 'status']
+const FORBIDDEN_TERMS = /hour|man[ -]?days?/i
 const EXPORT_ALL = 'export=all_clients'
 
 let seq = 0
@@ -62,10 +64,11 @@ function fixture(): FakeAttendanceRow[] {
   ]
 }
 
+// Work Days vs Article Days for Acme: WS1 has A and B on 09-01 plus A on 09-02, so 2 dates but 3 article-days.
 const ACME_ROWS: Partial<ClientWorkSlot>[] = [
-  { client_name: 'Acme', slot_number: 'WS3', articles_count: 1, article_names: 'Article B', attendance_days: 1, status: 'Active',    first_date: '2026-10-06', last_date: '2026-10-06' },
-  { client_name: 'Acme', slot_number: 'WS1', articles_count: 2, article_names: 'Article A, Article B', attendance_days: 2, status: 'Completed', first_date: '2026-09-01', last_date: '2026-09-02' },
-  { client_name: 'Acme', slot_number: 'WS2', articles_count: 1, article_names: 'Article A', attendance_days: 1, status: 'Completed', first_date: '2026-09-20', last_date: '2026-09-20' },
+  { client_name: 'Acme', slot_number: 'WS3', articles_count: 1, article_names: 'Article B', attendance_days: 1, article_days: 1, status: 'Active',    first_date: '2026-10-06', last_date: '2026-10-06' },
+  { client_name: 'Acme', slot_number: 'WS1', articles_count: 2, article_names: 'Article A, Article B', attendance_days: 2, article_days: 3, status: 'Completed', first_date: '2026-09-01', last_date: '2026-09-02' },
+  { client_name: 'Acme', slot_number: 'WS2', articles_count: 1, article_names: 'Article A', attendance_days: 1, article_days: 1, status: 'Completed', first_date: '2026-09-20', last_date: '2026-09-20' },
 ]
 
 interface CallOptions {
@@ -107,7 +110,7 @@ const fmtDate = (iso: string) => new Date(iso).toLocaleDateString('en-IN')   // 
 
 // A JSON slot as it appears in a sheet row.
 const toSheetRow = (r: ClientWorkSlot) =>
-  [r.client_name, r.articles_count, r.article_names, r.attendance_days, fmtDate(r.first_date), fmtDate(r.last_date), r.status, r.slot_number]
+  [r.client_name, r.articles_count, r.article_names, r.attendance_days, r.article_days, fmtDate(r.first_date), fmtDate(r.last_date), r.status, r.slot_number]
 
 async function readSheet(res: Response) {
   const wb = new ExcelJS.Workbook()
@@ -142,17 +145,18 @@ describe('GET /api/export/client-work-duration', () => {
       assert.ok(calls.includes('eq:assignments.client_name:Acme'))
     })
 
-    it('Days combines articles: distinct dates for the client, not man-days', async () => {
+    it('Work Days counts distinct client dates; Article Days counts each article on each date', async () => {
       const { rows } = await rowsFor(forClient('Acme'))
       const ws1 = rows.find(r => r.slot_number === 'WS1')
 
-      assert.equal(ws1?.attendance_days, 2)   // 09-01 (A and B) + 09-02: not 3 man-days
+      assert.equal(ws1?.attendance_days, 2)   // two dates: 09-01 and 09-02
+      assert.equal(ws1?.article_days, 3)      // A and B on 09-01, A on 09-02
     })
 
-    it('two sessions on one date count as one day', async () => {
+    it('two sessions of one article on one date: Work Days 1, Article Days 1', async () => {
       const { rows } = await rowsFor(forClient('Beta'))
-      assert.deepEqual(pick(rows, ['client_name', 'slot_number', 'attendance_days', 'status']), [
-        { client_name: 'Beta', slot_number: 'WS1', attendance_days: 1, status: 'Active' },
+      assert.deepEqual(pick(rows, ['client_name', 'slot_number', 'attendance_days', 'article_days', 'status']), [
+        { client_name: 'Beta', slot_number: 'WS1', attendance_days: 1, article_days: 1, status: 'Active' },
       ])
     })
 
@@ -160,7 +164,10 @@ describe('GET /api/export/client-work-duration', () => {
       for (const client of ['Acme', 'Beta', 'Gamma & Co.']) {
         const { rows } = await rowsFor(forClient(client))
         assert.ok(rows.length > 0, client)
-        for (const row of rows) assert.deepEqual(Object.keys(row).sort(), SLOT_FIELDS, client)
+        for (const row of rows) {
+          assert.deepEqual(Object.keys(row).sort(), SLOT_FIELDS, client)
+          assert.ok(!Object.keys(row).some(k => FORBIDDEN_TERMS.test(k)), `${client}: no hours / man-days field`)
+        }
       }
     })
 
@@ -191,11 +198,12 @@ describe('GET /api/export/client-work-duration', () => {
       const screenRows = (await rowsFor(forClient('Acme'))).rows
 
       assert.deepEqual(headers, HEADERS)
-      assert.ok(!headers.some(h => /hour/i.test(String(h))), 'no Hours column')
+      assert.ok(!headers.some(h => FORBIDDEN_TERMS.test(String(h))), 'no hours / man-days column')
       assert.ok(rows.every(r => r.length === HEADERS.length), 'no extra cells')
       assert.deepEqual(rows, screenRows.map(toSheetRow))
       assert.equal(rows.length, 3)
-      assert.deepEqual(rows.map(r => r[3]), [1, 2, 1])   // Days Punched, unchanged: WS3, WS1, WS2
+      assert.deepEqual(rows.map(r => r[3]), [1, 2, 1])   // Work Days, unchanged: WS3, WS1, WS2
+      assert.deepEqual(rows.map(r => r[4]), [1, 3, 1])   // Article Days: WS3, WS1, WS2
     })
 
     it('file name sanitises special characters in a client name', async () => {
@@ -223,10 +231,11 @@ describe('GET /api/export/client-work-duration', () => {
       assert.deepEqual(headers, HEADERS)
     })
 
-    it('has no Hours column', async () => {
+    it('has Work Days then Article Days, and no hours / man-days column', async () => {
       const { headers, rows } = await exportAll()
 
-      assert.ok(!headers.some(h => /hour/i.test(String(h))))
+      assert.deepEqual(headers.slice(3, 5), ['Work Days', 'Article Days'])
+      assert.ok(!headers.some(h => FORBIDDEN_TERMS.test(String(h))))
       assert.ok(rows.length > 0)
       assert.ok(rows.every(r => r.length === HEADERS.length), 'no extra cells')
     })
@@ -235,13 +244,13 @@ describe('GET /api/export/client-work-duration', () => {
       const { rows } = await exportAll()
 
       assert.deepEqual(
-        rows.map(r => [r[0], r[7], r[6], r[3]]),   // client, slot, status, days
+        rows.map(r => [r[0], r[8], r[7], r[3], r[4]]),   // client, slot, status, Work Days, Article Days
         [
-          ['Beta',        'WS1', 'Active',    1],
-          ['Acme',        'WS3', 'Active',    1],
-          ['Acme',        'WS1', 'Completed', 2],
-          ['Gamma & Co.', 'WS1', 'Completed', 1],
-          ['Acme',        'WS2', 'Completed', 1],
+          ['Beta',        'WS1', 'Active',    1, 1],
+          ['Acme',        'WS3', 'Active',    1, 1],
+          ['Acme',        'WS1', 'Completed', 2, 3],
+          ['Gamma & Co.', 'WS1', 'Completed', 1, 1],
+          ['Acme',        'WS2', 'Completed', 1, 1],
         ]
       )
     })
@@ -258,8 +267,11 @@ describe('GET /api/export/client-work-duration', () => {
     it('excludes unallocated / Others punches', async () => {
       const { rows } = await exportAll()
 
-      assert.ok(!rows.some(r => r[5] === fmtDate('2026-10-07')))   // Last Punch: the unallocated punch's date never appears
-      assert.equal(rows.reduce((sum, r) => sum + (r[3] as number), 0), (1 + 2 + 1) + 1 + 1)   // Acme 4, Beta 1, Gamma 1 — the unallocated punch adds no day
+      const sum = (column: number) => rows.reduce((total, r) => total + (r[column] as number), 0)
+
+      assert.ok(!rows.some(r => r[6] === fmtDate('2026-10-07')))   // Last Punch: the unallocated punch's date never appears
+      assert.equal(sum(3), (1 + 2 + 1) + 1 + 1)   // Work Days: Acme 4, Beta 1, Gamma 1 — the unallocated punch adds no day
+      assert.equal(sum(4), (1 + 3 + 1) + 1 + 1)   // Article Days: Acme 5, Beta 1, Gamma 1 — ...and no article-day
     })
 
     it('uses one server-side attendance stream — no per-client requests', async () => {
@@ -282,7 +294,8 @@ describe('GET /api/export/client-work-duration', () => {
       assert.deepEqual(calls.filter(c => c.startsWith('range:')), ['range:0-999', 'range:1000-1999', 'range:2000-2999'])
       assert.equal(calls.filter(c => c.startsWith('eq:')).length, 0)
       assert.equal(new Set(rows.map(r => r[0])).size, 40)
-      assert.equal(rows.reduce((sum, r) => sum + (r[3] as number), 0), 2300)   // every session landed in exactly one slot
+      assert.equal(rows.reduce((sum, r) => sum + (r[3] as number), 0), 2300)   // Work Days: every session landed in exactly one slot
+      assert.equal(rows.reduce((sum, r) => sum + (r[4] as number), 0), 2300)   // Article Days: one article, one session per date
     })
   })
 
