@@ -3,6 +3,7 @@ import { createAdminClient } from '@/lib/supabase/admin'
 import { NextRequest, NextResponse } from 'next/server'
 import { isArticleRole, type WorkType } from '@/types/app'
 import { isValidCoordinate } from '@/lib/gps'
+import { closeSessionRecord } from '@/lib/sessionClosure'
 
 export async function POST(req: NextRequest) {
   const supabase = await createClient()
@@ -84,7 +85,7 @@ export async function POST(req: NextRequest) {
   // --- Block if ANY prior session is still open (across all dates) ---
   const { data: openRecord } = await supabase
     .from('attendance_records')
-    .select('id, attendance_date')
+    .select('id, attendance_date, note')
     .eq('article_id', user.id)
     .is('checked_out_at', null)
     .not('checked_in_at', 'is', null)
@@ -102,14 +103,10 @@ export async function POST(req: NextRequest) {
         { status: 409 }
       )
     }
-    // Stale record from a previous day — auto-close at 23:59:59 IST and continue
-    const { error: autoCloseError } = await admin
-      .from('attendance_records')
-      .update({
-        checked_out_at: new Date(`${openRecord.attendance_date}T23:59:59+05:30`).toISOString(),
-        note:           'Auto-closed: check-out not recorded',
-      })
-      .eq('id', openRecord.id)
+    // Stale record from a previous day — auto-close at 23:59:59 IST of its own
+    // attendance date (lib/sessionClosure: a session never spans dates) and
+    // continue
+    const autoCloseError = await closeSessionRecord(admin, openRecord, 'check-out not recorded', new Date())
 
     if (autoCloseError) {
       return NextResponse.json(

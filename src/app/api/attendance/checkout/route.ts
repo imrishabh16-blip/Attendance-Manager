@@ -3,6 +3,7 @@ import { createAdminClient } from '@/lib/supabase/admin'
 import { NextRequest, NextResponse } from 'next/server'
 import { isArticleRole } from '@/types/app'
 import { isValidCoordinate } from '@/lib/gps'
+import { effectiveCheckoutAt } from '@/lib/sessionClosure'
 
 export async function POST(req: NextRequest) {
   const supabase = await createClient()
@@ -40,7 +41,7 @@ export async function POST(req: NextRequest) {
   // Verify the record belongs to this article and is still open
   const { data: record } = await admin
     .from('attendance_records')
-    .select('id, article_id, checked_out_at')
+    .select('id, article_id, checked_out_at, attendance_date')
     .eq('id', record_id as string)
     .single()
 
@@ -52,10 +53,13 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Already checked out' }, { status: 409 })
   }
 
+  // A session never spans more than its attendance date: checked out on that
+  // IST date -> the actual time; after midnight (e.g. a tab left open) ->
+  // capped at 23:59:59 IST of the original date.
   const { data, error } = await admin
     .from('attendance_records')
     .update({
-      checked_out_at:  new Date().toISOString(),
+      checked_out_at:  effectiveCheckoutAt(record.attendance_date, new Date()),
       checked_out_lat: latitude,
       checked_out_lng: longitude,
       note:            note ?? undefined,

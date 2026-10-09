@@ -2,9 +2,10 @@
 // knows nothing about tsconfig's "@/*" -> "src/*" path alias).
 //
 //  - "@/foo/bar" resolves to src/foo/bar.ts (or .tsx / index.ts).
-//  - "@/lib/supabase/server" is swapped for a stub, because the real module
-//    needs Next's request-scoped cookies(). Type-checking still sees the real
-//    module through tsconfig paths; only the runtime import is replaced.
+//  - "@/lib/supabase/server" and "@/lib/supabase/admin" are swapped for stubs,
+//    because the real modules need Next's request-scoped cookies() / real
+//    credentials. Type-checking still sees the real modules through tsconfig
+//    paths; only the runtime import is replaced.
 import { existsSync } from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
@@ -13,6 +14,7 @@ const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '.
 
 const STUBS = {
   '@/lib/supabase/server': path.join(root, 'tests', 'support', 'supabaseServerStub.ts'),
+  '@/lib/supabase/admin':  path.join(root, 'tests', 'support', 'supabaseAdminStub.ts'),
 }
 
 export async function resolve(specifier, context, nextResolve) {

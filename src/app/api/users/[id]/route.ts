@@ -2,35 +2,22 @@ import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { NextRequest, NextResponse } from 'next/server'
 import { isArticleRole, type UserRole } from '@/types/app'
+import { closeOpenSession } from '@/lib/sessionClosure'
 
 const VALID_ROLES: UserRole[] = ['article', 'intern', 'manager', 'partner', 'admin']
 
-// Closes the target's open attendance session (if any) before an admin
-// action removes their ability to check themselves out. Returns the update
-// error (or null if there was nothing to close / it succeeded), so the
-// caller can abort the profile change on failure instead of leaving an
-// inconsistent state.
-async function closeOpenSession(
-  admin: ReturnType<typeof createAdminClient>,
-  articleId: string,
-  closedAt: string,
-  note: string
-) {
-  const { data: openRecord } = await admin
-    .from('attendance_records')
-    .select('id')
-    .eq('article_id', articleId)
-    .is('checked_out_at', null)
-    .maybeSingle()
+// Open sessions are closed through lib/sessionClosure before an admin action
+// removes the user's ability to check themselves out: at the action time if
+// it is still the session's attendance date, otherwise at 23:59:59 IST of
+// that original date — never later. A close failure aborts the action.
+const CLOSE_SESSION_FAILED =
+  "Could not close the user's open attendance session. No changes were made. Please try again."
 
-  if (!openRecord) return null
-
-  const { error } = await admin
-    .from('attendance_records')
-    .update({ checked_out_at: closedAt, note })
-    .eq('id', openRecord.id)
-
-  return error
+// The raw database error stays in the server log; the admin gets this stable,
+// actionable message instead.
+function sessionCloseFailed(action: string, userId: string, error: unknown) {
+  console.error(`users/${userId}: ${action} aborted — could not close the open attendance session`, error)
+  return NextResponse.json({ error: CLOSE_SESSION_FAILED }, { status: 500 })
 }
 
 // PATCH /api/users/[id] — approve | deactivate | reactivate | change_role
@@ -102,16 +89,15 @@ export async function PATCH(
       }
     }
 
-    const now = new Date().toISOString()
+    const nowDate = new Date()
+    const now     = nowDate.toISOString()
 
     // Deactivation revokes portal access, so an article/intern with an open
     // session can no longer check themselves out. Close it first — if this
-    // fails, abort before the profile is touched (see ordering note below).
+    // fails, abort before the profile is touched, so nothing is half-applied.
     if (target && isArticleRole(target.role as UserRole)) {
-      const closeError = await closeOpenSession(admin, id, now, 'Auto-closed: user deactivated')
-      if (closeError) {
-        return NextResponse.json({ error: closeError.message }, { status: 500 })
-      }
+      const closeError = await closeOpenSession(admin, id, 'user deactivated', nowDate)
+      if (closeError) return sessionCloseFailed('deactivate', id, closeError)
     }
 
     updatePayload = {
@@ -162,10 +148,8 @@ export async function PATCH(
     // capable role — never between article and intern, since checkout
     // access is unaffected by that transition.
     if (target && isArticleRole(target.role as UserRole) && !isArticleRole(role)) {
-      const closeError = await closeOpenSession(admin, id, new Date().toISOString(), 'Auto-closed: role changed')
-      if (closeError) {
-        return NextResponse.json({ error: closeError.message }, { status: 500 })
-      }
+      const closeError = await closeOpenSession(admin, id, 'role changed', new Date())
+      if (closeError) return sessionCloseFailed('change_role', id, closeError)
     }
 
     updatePayload = { role }

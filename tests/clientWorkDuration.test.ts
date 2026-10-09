@@ -47,6 +47,27 @@ describe('deriveClientWorkDuration', () => {
     assert.equal(row.attendance_days, 1)
   })
 
+  it('depends only on attendance dates, never on checkout timestamps — so session-closure rules cannot move Days', () => {
+    const base = [
+      session('A', 'Acme', '2026-09-01', '09:00', '13:00'),
+      session('B', 'Acme', '2026-09-01', '10:00', '14:00'),
+      session('A', 'Acme', '2026-09-02', '09:00', '10:00'),
+      session('A', 'Acme', '2026-09-20', '09:00', '10:00'),
+    ]
+    const closedAs = (checkedOutAt: (r: RawSessionRecord) => string | null) =>
+      deriveClientWorkDuration(base.map(r => ({ ...r, checked_out_at: checkedOutAt(r) })), TODAY)
+
+    const sameDay        = closedAs(r => r.checked_out_at)                                  // closed on its date
+    const stillOpen      = closedAs(() => null)                                              // never closed
+    const multiDay       = closedAs(() => '2026-10-08T08:30:00.000Z')                        // old deactivation behaviour
+    const cappedAtMidnight = closedAs(r => `${r.attendance_date}T18:29:59.000Z`)             // 23:59:59 IST of its own date
+
+    assert.deepEqual(stillOpen, sameDay)
+    assert.deepEqual(multiDay, sameDay)
+    assert.deepEqual(cappedAtMidnight, sameDay)
+    assert.deepEqual(sameDay.map(r => r.attendance_days), [2, 1])   // WS1: 09-01 + 09-02, WS2: 09-20
+  })
+
   it('a slot carries exactly the report fields — no hours / duration', () => {
     const [row] = deriveClientWorkDuration([session('A', 'Acme', '2026-09-01', '09:00', '13:00')], TODAY)
 
