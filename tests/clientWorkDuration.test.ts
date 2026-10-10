@@ -17,7 +17,9 @@ const TODAY = '2026-10-08'
 
 // One closed session, as the attendance query returns it. The times only make
 // the record realistic — Client Analytics does not use durations.
-function session(article: string, client: string, date: string, from: string, to: string): RawSessionRecord {
+function session(
+  article: string, client: string, date: string, from: string, to: string, workType?: string | null,
+): RawSessionRecord {
   return {
     article_id:      article,
     article_name:    `Article ${article}`,
@@ -25,6 +27,7 @@ function session(article: string, client: string, date: string, from: string, to
     attendance_date: date,
     checked_in_at:   `${date}T${from}:00+00:00`,
     checked_out_at:  `${date}T${to}:00+00:00`,
+    work_type:       workType,
   }
 }
 
@@ -80,7 +83,7 @@ describe('deriveClientWorkDuration', () => {
 
     assert.deepEqual(Object.keys(row).sort(), [
       'article_days', 'article_names', 'articles_count', 'attendance_days', 'client_name',
-      'first_date', 'last_date', 'slot_number', 'status',
+      'department_types', 'first_date', 'last_date', 'slot_number', 'status',
     ])
   })
 
@@ -240,7 +243,10 @@ describe('Work Days and Article Days', () => {
         const rnd = mulberry32(seed)
         const pick = <T>(xs: T[]) => xs[Math.floor(rnd() * xs.length)]
         const records = Array.from({ length: 80 }, () => {
-          const r = session(pick(['A', 'B', 'C', 'D']), pick(['Acme', 'Beta', 'Gamma']), day(Math.floor(rnd() * 70)), '09:00', '17:00')
+          const r = session(
+            pick(['A', 'B', 'C', 'D']), pick(['Acme', 'Beta', 'Gamma']), day(Math.floor(rnd() * 70)), '09:00', '17:00',
+            pick<string | null | undefined>([null, undefined, '', '  ', 'Audit', 'Tax', 'GST', ' Audit ']),
+          )
           const x = rnd()
           return x < 0.2 ? { ...r, checked_out_at: null }                                      // open
                : x < 0.35 ? { ...r, checked_out_at: '2026-12-31T00:00:00+00:00' } : r         // legacy multi-date checkout
@@ -264,6 +270,8 @@ describe('Work Days and Article Days', () => {
             const want   = new Set(inSlot.map(r => `${r.article_id}/${r.attendance_date}`)).size
             assert.equal(got[i].attendance_days, ds.length, `seed ${seed} / ${client} / slot ${i + 1}: Work Days`)
             assert.equal(got[i].article_days, want, `seed ${seed} / ${client} / slot ${i + 1}: Article Days`)
+            const wantDepartments = [...new Set(inSlot.map(r => r.work_type?.trim()).filter((d): d is string => !!d))].sort().join(', ')
+            assert.equal(got[i].department_types, wantDepartments, `seed ${seed} / ${client} / slot ${i + 1}: Department Type`)
             assert.ok(got[i].article_days >= got[i].attendance_days)
             assert.ok(got[i].article_days <= got[i].attendance_days * got[i].articles_count)
             totalArticleDays += got[i].article_days
@@ -272,5 +280,112 @@ describe('Work Days and Article Days', () => {
         }
       }
     })
+  })
+})
+
+describe('Department Type (department_types)', () => {
+  const dept = (rows: ReturnType<typeof deriveClientWorkDuration>) => rows.map(r => r.department_types)
+
+  it('lists every distinct department a slot was punched under, sorted and comma-separated', () => {
+    const rows = deriveClientWorkDuration([
+      session('A', 'Acme', '2026-09-01', '09:00', '13:00', 'Tax'),
+      session('B', 'Acme', '2026-09-01', '10:00', '14:00', 'Audit'),
+      session('C', 'Acme', '2026-09-02', '10:00', '14:00', 'GST'),
+    ], TODAY)
+
+    assert.deepEqual(dept(rows), ['Audit, GST, Tax'])
+  })
+
+  it('does not repeat a department used by several sessions, articles or days', () => {
+    const rows = deriveClientWorkDuration([
+      session('A', 'Acme', '2026-09-01', '09:00', '11:00', 'Audit'),
+      session('A', 'Acme', '2026-09-01', '14:00', '17:00', 'Audit'),   // same article, same day, same department
+      session('B', 'Acme', '2026-09-01', '09:00', '17:00', 'Audit'),   // another article, same department
+      session('A', 'Acme', '2026-09-02', '09:00', '17:00', 'Audit'),   // another day
+      session('B', 'Acme', '2026-09-02', '09:00', '17:00', 'Tax'),
+    ], TODAY)
+
+    assert.deepEqual(dept(rows), ['Audit, Tax'])
+  })
+
+  it('leaves out missing and blank department types', () => {
+    const none = deriveClientWorkDuration([
+      session('A', 'Acme', '2026-09-01', '09:00', '13:00', null),
+      session('B', 'Acme', '2026-09-01', '09:00', '13:00'),            // undefined: the assignment had no work type
+      session('C', 'Acme', '2026-09-02', '09:00', '13:00', ''),
+      session('D', 'Acme', '2026-09-02', '09:00', '13:00', '   '),
+    ], TODAY)
+    const mixed = deriveClientWorkDuration([
+      session('A', 'Acme', '2026-09-01', '09:00', '13:00', null),
+      session('B', 'Acme', '2026-09-01', '09:00', '13:00', 'Tax'),
+      session('C', 'Acme', '2026-09-01', '09:00', '13:00', ''),
+    ], TODAY)
+
+    assert.deepEqual(dept(none), [''])           // an empty value, not "null" / "undefined" / a stray comma
+    assert.deepEqual(dept(mixed), ['Tax'])       // no leading or trailing ", "
+  })
+
+  it('treats values that differ only by surrounding whitespace as one department', () => {
+    const rows = deriveClientWorkDuration([
+      session('A', 'Acme', '2026-09-01', '09:00', '13:00', ' Audit '),
+      session('B', 'Acme', '2026-09-01', '09:00', '13:00', 'Audit'),
+    ], TODAY)
+
+    assert.deepEqual(dept(rows), ['Audit'])
+  })
+
+  it('does not depend on the order of the records', () => {
+    const records = [
+      session('A', 'Acme', '2026-09-01', '09:00', '13:00', 'Tax'),
+      session('B', 'Acme', '2026-09-01', '09:00', '13:00', 'Audit'),
+      session('C', 'Acme', '2026-09-02', '09:00', '13:00', 'GST'),
+    ]
+
+    assert.deepEqual(dept(deriveClientWorkDuration([...records].reverse(), TODAY)), dept(deriveClientWorkDuration(records, TODAY)))
+  })
+
+  it('describes only its own slot: departments of another slot or another client never leak in', () => {
+    const rows = deriveClientWorkDuration([
+      session('A', 'Acme', '2026-09-01', '09:00', '13:00', 'Audit'),
+      session('B', 'Acme', '2026-09-02', '09:00', '13:00', 'Tax'),
+      session('A', 'Acme', '2026-09-20', '09:00', '13:00', 'Advisory'),   // 18 days later -> a second slot
+      session('A', 'Beta', '2026-09-01', '09:00', '13:00', 'Payroll'),    // another client, same dates
+    ], TODAY)
+
+    assert.deepEqual(
+      rows.map(r => [r.client_name, r.slot_number, r.department_types]).sort(),
+      [['Acme', 'WS1', 'Audit, Tax'], ['Acme', 'WS2', 'Advisory'], ['Beta', 'WS1', 'Payroll']]
+    )
+  })
+
+  it('never splits a slot: several departments in one stretch of days stay one slot', () => {
+    const rows = deriveClientWorkDuration([
+      session('A', 'Acme', '2026-09-01', '09:00', '13:00', 'Audit'),
+      session('A', 'Acme', '2026-09-02', '09:00', '13:00', 'Tax'),
+      session('A', 'Acme', '2026-09-03', '09:00', '13:00', 'GST'),
+    ], TODAY)
+
+    assert.equal(rows.length, 1)
+    assert.equal(rows[0].attendance_days, 3)
+  })
+
+  it('changes nothing else: Work Days, Article Days, slots, status and ordering are identical with or without work types', () => {
+    const build = (workType: (i: number) => string | null | undefined) => [
+      session('A', 'Acme',  '2026-09-01', '09:00', '13:00', workType(0)),
+      session('B', 'Acme',  '2026-09-01', '10:00', '14:00', workType(1)),
+      session('A', 'Acme',  '2026-09-02', '09:00', '10:00', workType(2)),
+      session('A', 'Acme',  '2026-09-20', '09:00', '10:00', workType(3)),   // new slot
+      session('B', 'Acme',  '2026-10-06', '09:00', '10:00', workType(4)),   // Active slot
+      session('C', 'Beta',  '2026-10-05', '09:00', '11:00', workType(5)),
+      session('A', 'Gamma', '2026-09-10', '09:00', '10:30', workType(6)),
+    ]
+    const types = ['Audit', 'Tax', 'GST', 'Advisory', null, 'Payroll', '']
+    const withTypes    = deriveClientWorkDuration(build(i => types[i]), TODAY)
+    const withoutTypes = deriveClientWorkDuration(build(() => undefined), TODAY)
+
+    assert.ok(withTypes.some(r => r.department_types !== ''))
+    assert.ok(withoutTypes.every(r => r.department_types === ''))
+    const strip = (rows: typeof withTypes) => rows.map(({ department_types, ...rest }) => rest)
+    assert.deepEqual(strip(withTypes), strip(withoutTypes))      // same rows, same fields, same order
   })
 })

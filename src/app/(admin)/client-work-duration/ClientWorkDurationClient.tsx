@@ -144,6 +144,7 @@ export default function ClientWorkDurationClient({ clients }: Props) {
                       <Th>Work Slot</Th>
                       <Th>Articles</Th>
                       <Th>Article Names</Th>
+                      <Th>Department Type</Th>
                       <Th>Work Days</Th>
                       <Th>Article Days</Th>
                       <Th>Status</Th>
@@ -159,6 +160,9 @@ export default function ClientWorkDurationClient({ clients }: Props) {
                         <Td>{row.articles_count}</Td>
                         <Td className="max-w-xs truncate">
                           <span title={row.article_names}>{row.article_names}</span>
+                        </Td>
+                        <Td className="max-w-xs truncate">
+                          <span title={row.department_types}>{row.department_types}</span>
                         </Td>
                         <Td>{row.attendance_days}</Td>
                         <Td>{row.article_days}</Td>

@@ -25,7 +25,7 @@ export async function fetchAllPages<T>(
 // unallocated punches, which carry no validated client identity) are dropped
 // by the database rather than filtered afterwards.
 export const SESSION_RECORD_SELECT =
-  'article_id, attendance_date, checked_in_at, checked_out_at, profiles!article_id(full_name), assignments!inner(client_name)'
+  'article_id, attendance_date, checked_in_at, checked_out_at, profiles!article_id(full_name), assignments!inner(client_name, work_type)'
 
 export type RawAttendanceRow = {
   article_id:      string
@@ -33,7 +33,7 @@ export type RawAttendanceRow = {
   checked_in_at:   string
   checked_out_at:  string | null
   profiles:        { full_name: string } | { full_name: string }[] | null
-  assignments:     { client_name: string } | { client_name: string }[] | null
+  assignments:     { client_name: string; work_type?: string | null } | { client_name: string; work_type?: string | null }[] | null
 }
 
 function first<T>(embedded: T | T[] | null): T | null {
@@ -51,6 +51,7 @@ export function toSessionRecords(rows: RawAttendanceRow[]): RawSessionRecord[] {
       checked_out_at:  r.checked_out_at,
       article_name:    first(r.profiles)?.full_name ?? '',
       client_name:     assignment.client_name,
+      work_type:       assignment.work_type ?? null,
     }]
   })
 }

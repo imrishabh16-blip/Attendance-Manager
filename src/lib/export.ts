@@ -198,6 +198,7 @@ export async function buildClientWorkDurationExcel(rows: ClientWorkSlot[]): Prom
     { header: 'Client Name',     key: 'client_name',      width: 28 },
     { header: 'No. of Articles', key: 'articles_count',   width: 14 },
     { header: 'Article Names',   key: 'article_names',    width: 36 },
+    { header: 'Department Type', key: 'department_types', width: 28 },
     { header: 'Work Days',       key: 'attendance_days',  width: 14 },
     { header: 'Article Days',    key: 'article_days',     width: 14 },
     { header: 'First Punch',     key: 'first_date',       width: 16 },
@@ -215,6 +216,7 @@ export async function buildClientWorkDurationExcel(rows: ClientWorkSlot[]): Prom
       client_name:      row.client_name,
       articles_count:   row.articles_count,
       article_names:    row.article_names,
+      department_types: row.department_types,
       attendance_days:  row.attendance_days,
       article_days:     row.article_days,
       first_date:       fmtDate(row.first_date),
@@ -226,7 +228,7 @@ export async function buildClientWorkDurationExcel(rows: ClientWorkSlot[]): Prom
     if (color) r.getCell('status').font = { bold: true, color: { argb: color } }
   }
 
-  ws.autoFilter = { from: 'A1', to: 'I1' }
+  ws.autoFilter = { from: 'A1', to: 'J1' }
 
   const buffer = await wb.xlsx.writeBuffer()
   return Buffer.from(buffer)

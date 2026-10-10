@@ -8,6 +8,9 @@ export interface RawSessionRecord {
   checked_out_at:  string | null
   article_name:    string
   client_name:     string
+  // The assignment's work type (shown as "Department Type"). Optional so
+  // records built without one — Client Engagement ignores it — stay valid.
+  work_type?:      string | null
 }
 
 function daysBetween(a: string, b: string): number {
@@ -22,6 +25,7 @@ function daysBetween(a: string, b: string): number {
 interface DateSlot {
   articles_count:  number
   article_names:   string
+  department_types: string
   attendance_days: number
   article_days:    number
   status:          'Active' | 'Completed'
@@ -38,6 +42,11 @@ interface DateSlot {
 // Both count attendance_date only — never session duration or open/closed
 // state — so any number of sessions by one article on one date is one
 // Article Day, and several articles on one date are several.
+//   Department Type (department_types) = the distinct work types the slot's
+//                                    own records were punched under, sorted
+//                                    and comma-separated; blank / missing
+//                                    values are left out. It only describes
+//                                    the slot — it never splits or changes one.
 function computeSlots(groupRecords: RawSessionRecord[], todayIST: string): DateSlot[] {
   // Distinct attendance dates, sorted ascending, split into slots
   const dateSet     = new Set(groupRecords.map(r => r.attendance_date))
@@ -59,14 +68,17 @@ function computeSlots(groupRecords: RawSessionRecord[], todayIST: string): DateS
     const bucketDateSet = new Set(bucketDates)
     const bucketRecords = groupRecords.filter(r => bucketDateSet.has(r.attendance_date))
 
-    const articleMap  = new Map<string, string>()
-    const articleDays = new Set<string>()
+    const articleMap      = new Map<string, string>()
+    const articleDays     = new Set<string>()
+    const departmentTypes = new Set<string>()
 
     for (const r of bucketRecords) {
       if (!articleMap.has(r.article_id)) {
         articleMap.set(r.article_id, r.article_name)
       }
       articleDays.add(`${r.article_id}|${r.attendance_date}`)
+      const department = r.work_type?.trim()
+      if (department) departmentTypes.add(department)
     }
 
     const firstDate = bucketDates[0]
@@ -75,6 +87,7 @@ function computeSlots(groupRecords: RawSessionRecord[], todayIST: string): DateS
     return {
       articles_count:  articleMap.size,
       article_names:   [...articleMap.values()].filter(Boolean).sort().join(', '),
+      department_types: [...departmentTypes].sort().join(', '),
       attendance_days: bucketDates.length,
       article_days:    articleDays.size,
       status:          (daysBetween(lastDate, todayIST) <= 7 ? 'Active' : 'Completed') as 'Active' | 'Completed',
@@ -89,6 +102,7 @@ export interface ClientWorkSlot {
   slot_number:     string
   articles_count:  number
   article_names:   string
+  department_types: string
   attendance_days: number
   article_days:    number
   status:          'Active' | 'Completed'
@@ -100,8 +114,9 @@ export interface ClientWorkSlot {
 // alone rather than by assignment (client + work type). Articles sometimes
 // punch into the wrong department/assignment for a client; grouping by client
 // only keeps that from fragmenting one client's work history into unrelated
-// slots. Work type is intentionally not part of the identity or the output
-// here — a client's slot can span multiple work types.
+// slots. Work type is intentionally not part of the slot identity — a
+// client's slot can span multiple work types; each slot just lists the
+// distinct ones (department_types) its own records were punched under.
 export function deriveClientWorkDuration(records: RawSessionRecord[], todayIST: string): ClientWorkSlot[] {
   const byClient = new Map<string, RawSessionRecord[]>()
   for (const r of records) {

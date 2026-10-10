@@ -15,7 +15,7 @@ export interface FakeAttendanceRow {
   checked_out_at:  string | null
   profiles:        { full_name: string } | null
   // null = Others / unallocated punch (no assignment, no validated client)
-  assignments:     { client_name: string } | null
+  assignments:     { client_name: string; work_type?: string | null } | null
 }
 
 type QueryResult = { data: FakeAttendanceRow[]; error: null }
